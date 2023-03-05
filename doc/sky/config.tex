@@ -1,0 +1,32 @@
+\usepackage{chngcntr}
+\usepackage{graphicx}
+\usepackage{mathtools}
+\usepackage{mdframed}
+\usepackage{pgfplots}
+\usepackage{csquotes}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{intersections, positioning, calc, fit}
+
+\usepackage{graphicx}
+\graphicspath{{./media/}}
+
+% from https://tex.stackexchange.com/questions/66216/draw-arc-in-tikz-when-center-of-circle-is-specified
+\def\centerarc[#1](#2)(#3:#4:#5);%
+%Syntax: [draw options] (center) (initial angle:final angle:radius)
+    {
+    %\draw[#1] ($(#2)+({#5*cos(#3)},{#5*sin(#3)})$) arc (#3:#4:#5);
+    \draw[#1]([shift=(#3:#5)]#2) arc (#3:#4:#5);
+    }
+
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\counterwithin*{section}{part}
+
+\title{Wolken und Himmel dynamisch rendern}
+\author{Jan Spindler, Simon Katz}
+
+\newcommand{\matNr}{?, 3309821}
+\newcommand{\reportType}{Project Group}
+\date{\today}

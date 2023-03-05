@@ -1,66 +1,52 @@
 #pragma once
 
+#include "engine/graphics/vulkan/Swapchain.hpp"
 #include <engine/graphics/Common.hpp>
 #include <engine/graphics/vulkan/CommandPool.hpp>
 #include <engine/graphics/vulkan/Shader.hpp>
+#include <imgui.h>
+#include "engine/graphics/Subpass.hpp"
 
 namespace en
 {
-	class ImGuiRenderer
+	// singleton?
+	class ImGuiRenderer : public Subpass
 	{
 	public:
-		static void Init(uint32_t width, uint32_t height);
-		static void Shutdown();
+		ImGuiRenderer(size_t maxConcurrent);
+		~ImGuiRenderer() override;
 
-		static void Resize(uint32_t width, uint32_t height);
-		static void StartFrame();
-		static void EndFrame(VkQueue queue);
+		void Resize(uint32_t width, uint32_t height);
+		void StartFrame();
+		void EndFrame(VkQueue queue, size_t imageIndx);
 
-		static bool IsInitialized();
-		static VkImage GetImage();
+		void SetBackgroundImageView(VkImageView backgroundImageView);
 
-		static void SetBackgroundImageView(VkImageView backgroundImageView);
+		std::pair<VkSubpassDescription, VkSubpassContents> GetSubpass(
+			size_t subpass_indx,
+			const VkAttachmentReference &color_attachment,
+			const VkAttachmentReference &depth_attachment,
+			const VkAttachmentReference &swapchain_attachment) override;
+
+		void CreatePipeline(size_t subpass, const VkRenderPass renderPass) override;
+		void RecordFrameCommandBuffer(VkCommandBuffer buf, size_t frame_indx) override;
 
 	private:
-		static bool m_Initialized;
-		static uint32_t m_Width;
-		static uint32_t m_Height;
+		size_t m_MaxConcurrent;
 
-		static VkDescriptorPool m_ImGuiDescriptorPool;
-		static VkDescriptorSetLayout m_DescriptorSetLayout;
-		static VkDescriptorPool m_DescriptorPool;
+		ImDrawData *m_FrameDrawData;
 
-		static VkImageView m_BackgroundImageView;
-		static VkSampler m_Sampler;
-		static VkDescriptorSet m_DescriptorSet;
+		VkDescriptorPool m_ImGuiDescriptorPool;
+		// store for passing to secondary commandBuffer.
+		VkRenderPass m_RenderPass;
+		uint32_t m_Subpass;
+		std::vector<VkFramebuffer> m_Framebuffers;
 
-		static VkRenderPass m_RenderPass;
-		static vk::Shader* m_VertShader;
-		static vk::Shader* m_FragShader;
-		static VkPipelineLayout m_PipelineLayout;
-		static VkPipeline m_Pipeline;
+		void CreateImGuiDescriptorPool(VkDevice device);
 
-		static VkFormat m_Format;
-		static VkImage m_Image;
-		static VkDeviceMemory m_ImageMemory;
-		static VkImageView m_ImageView;
+		void CreateImageResources(VkDevice device);
+		void CreateFramebuffer(VkDevice device);
 
-		static VkFramebuffer m_Framebuffer;
-		static vk::CommandPool* m_CommandPool;
-		static VkCommandBuffer m_CommandBuffer;
-
-		static void CreateImGuiDescriptorPool(VkDevice device);
-		static void CreateDescriptorSetLayout(VkDevice device);
-		static void CreateDescriptorPool(VkDevice device);
-		static void CreateSampler(VkDevice device);
-		static void CreateDescriptorSet(VkDevice device);
-		static void CreateRenderPass(VkDevice device);
-		static void CreatePipelineLayout(VkDevice device);
-		static void CreatePipeline(VkDevice device);
-		static void CreateImageResources(VkDevice device);
-		static void CreateFramebuffer(VkDevice device);
-		static void CreateCommandPoolAndBuffer();
-
-		static void InitImGuiBackend(VkDevice device);
+		void InitImGuiBackend(VkDevice device);
 	};
 }

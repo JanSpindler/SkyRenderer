@@ -37,10 +37,12 @@ namespace en
 
 		static VkPhysicalDevice GetPhysicalDevice();
 		static uint32_t GetGraphicsQFI();
+		static uint32_t GetComputeQFI();
 		static uint32_t GetPresentQFI();
 
 		static VkDevice GetDevice();
 		static VkQueue GetGraphicsQueue();
+		static VkQueue GetComputeQueue();
 		static VkQueue GetPresentQueue();
 
 	private:
@@ -53,10 +55,12 @@ namespace en
 
 		static PhysicalDeviceInfo m_PhysicalDeviceInfo;
 		static uint32_t m_GraphicsQFI;
+		static uint32_t m_ComputeQFI;
 		static uint32_t m_PresentQFI;
 
 		static VkDevice m_Device;
 		static VkQueue m_GraphicsQueue;
+		static VkQueue m_ComputeQueue;
 		static VkQueue m_PresentQueue;
 
 		static void CreateInstance(const std::string& appName);

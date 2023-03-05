@@ -1,0 +1,15 @@
+\part{Einführung}
+\section{Motivation}
+Den Himmel überzeugend darzustellen ist offensichtlich ein wichtiger Teil von AAA-Games bis hin zu Simulationen. Wenn es
+Regnet, der Himmel aber strahlend blau und die Wolken unpassend weiß sind, ist der Realismus jeder Szene dahin. Mit dem
+speziellen Ziel Echtzeitrendering implementieren wir hier in unserem eigenen Vulkan-basierten Renderer ein Modul das
+sowohl die Atmosphäre als auch Wolken physikalisch basiert darstellt. Das gesamte System benötigt nur einen Renderpass,
+was (in vielen Fällen) mobilen, Tile Based Renderern erlaubt eine hohe Effizienz zu erreichen (hinsichtlich des
+wachsendes VR/AR-Marktes eine erwähnenswerte Eigenschaft).
+
+Neben der physikalischen Korrektheit wird auch das Ändern der Parameter unserer Simulation zur Laufzeit unterstützt,
+wobei insbesondere auf ein gleichbleibendes Leistungsprofil geachtet wird. Dies ermöglicht zum Beispiel Designern
+unterschiedlichste Umgebungsparameter anzupassen und direkt visuelles Feedback zu erhalten, oder innerhalb von Sekunden
+(aber dennoch mit fließendem Übergang) einen strahlend blauem Himmel in die Kulisse eines Unwetters zu verwandeln.
+
+\clearpage

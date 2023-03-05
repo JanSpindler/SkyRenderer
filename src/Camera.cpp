@@ -1,6 +1,12 @@
+#include <glm/gtx/dual_quaternion.hpp>
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <engine/graphics/Camera.hpp>
 #include <engine/graphics/VulkanAPI.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtx/transform.hpp>
+#include <glm/matrix.hpp>
+#include <imgui.h>
 
 namespace en
 {
@@ -12,28 +18,20 @@ namespace en
 		VkDevice device = VulkanAPI::GetDevice();
 
 		// Create Descriptor Set Layout
-		VkDescriptorSetLayoutBinding matrixBinding;
-		matrixBinding.binding = 0;
-		matrixBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		matrixBinding.descriptorCount = 1;
-		matrixBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-		matrixBinding.pImmutableSamplers = nullptr;
-		
-		VkDescriptorSetLayoutBinding posBinding;
-		posBinding.binding = 1;
-		posBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		posBinding.descriptorCount = 1;
-		posBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-		posBinding.pImmutableSamplers = nullptr;
-
-		std::vector<VkDescriptorSetLayoutBinding> bindings = { matrixBinding, posBinding };
+		VkDescriptorSetLayoutBinding layoutBinding;
+		layoutBinding.binding = 0;
+		layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		layoutBinding.descriptorCount = 1;
+		// calculate viewing direction in aerial_perspective, too.
+		layoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+		layoutBinding.pImmutableSamplers = nullptr;
 
 		VkDescriptorSetLayoutCreateInfo descSetLayoutCreateInfo;
 		descSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		descSetLayoutCreateInfo.pNext = nullptr;
 		descSetLayoutCreateInfo.flags = 0;
-		descSetLayoutCreateInfo.bindingCount = bindings.size();
-		descSetLayoutCreateInfo.pBindings = bindings.data();
+		descSetLayoutCreateInfo.bindingCount = 1;
+		descSetLayoutCreateInfo.pBindings = &layoutBinding;
 
 		VkResult result = vkCreateDescriptorSetLayout(device, &descSetLayoutCreateInfo, nullptr, &m_DescriptorSetLayout);
 		ASSERT_VULKAN(result);
@@ -70,27 +68,25 @@ namespace en
 
 	Camera::Camera(
 		const glm::vec3& pos,
-		const glm::vec3& viewDir,
+		const float zenith,
 		const glm::vec3& up,
-		float aspectRatio,
+		float width,
+		float height,
 		float fov,
 		float nearPlane,
 		float farPlane)
 		:
 		m_Pos(pos),
-		m_ViewDir(glm::normalize(viewDir)),
+		m_Zenith(zenith),
 		m_Up(glm::normalize(up)),
-		m_AspectRatio(aspectRatio),
+		m_Height(height),
+		m_Width(width),
 		m_Fov(fov),
 		m_NearPlane(nearPlane),
 		m_FarPlane(farPlane),
-		m_MatrixUniformBuffer(new vk::Buffer(
-			sizeof(CameraMatrices),
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-			{})),
-		m_PosUniformBuffer(new vk::Buffer(
-			sizeof(glm::vec3),
+		m_ViewDir{glm::vec3(0,0,1)},
+		m_UniformBuffer(new vk::Buffer(
+			sizeof(CamParams),
 			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			{}))
@@ -109,67 +105,65 @@ namespace en
 		ASSERT_VULKAN(result);
 
 		// Write Descriptor Set
-		VkDescriptorBufferInfo matrixBufferInfo;
-		matrixBufferInfo.buffer = m_MatrixUniformBuffer->GetVulkanHandle();
-		matrixBufferInfo.offset = 0;
-		matrixBufferInfo.range = sizeof(CameraMatrices);
+		VkDescriptorBufferInfo bufferInfo;
+		bufferInfo.buffer = m_UniformBuffer->GetVulkanHandle();
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(CamParams);
 
-		VkWriteDescriptorSet matrixWrite;
-		matrixWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		matrixWrite.pNext = nullptr;
-		matrixWrite.dstSet = m_DescriptorSet;
-		matrixWrite.dstBinding = 0;
-		matrixWrite.dstArrayElement = 0;
-		matrixWrite.descriptorCount = 1;
-		matrixWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		matrixWrite.pImageInfo = nullptr;
-		matrixWrite.pBufferInfo = &matrixBufferInfo;
-		matrixWrite.pTexelBufferView = nullptr;
+		VkWriteDescriptorSet writeDescSet;
+		writeDescSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writeDescSet.pNext = nullptr;
+		writeDescSet.dstSet = m_DescriptorSet;
+		writeDescSet.dstBinding = 0;
+		writeDescSet.dstArrayElement = 0;
+		writeDescSet.descriptorCount = 1;
+		writeDescSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		writeDescSet.pImageInfo = nullptr;
+		writeDescSet.pBufferInfo = &bufferInfo;
+		writeDescSet.pTexelBufferView = nullptr;
 
-		VkDescriptorBufferInfo posBufferInfo;
-		posBufferInfo.buffer = m_PosUniformBuffer->GetVulkanHandle();
-		posBufferInfo.offset = 0;
-		posBufferInfo.range = sizeof(glm::vec3);
+		vkUpdateDescriptorSets(device, 1, &writeDescSet, 0, nullptr);
 
-		VkWriteDescriptorSet posWrite;
-		posWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		posWrite.pNext = nullptr;
-		posWrite.dstSet = m_DescriptorSet;
-		posWrite.dstBinding = 1;
-		posWrite.dstArrayElement = 0;
-		posWrite.descriptorCount = 1;
-		posWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		posWrite.pImageInfo = nullptr;
-		posWrite.pBufferInfo = &posBufferInfo;
-		posWrite.pTexelBufferView = nullptr;
 
-		std::vector<VkWriteDescriptorSet> descWrites = { matrixWrite, posWrite };
-
-		vkUpdateDescriptorSets(device, descWrites.size(), descWrites.data(), 0, nullptr);
-
-		// Update
-		UpdateUniformBuffer();
+		// also sets m_{Height,Width}.
+		SetAspectRatio(width, height);
+		// Update.
+		UpdateUBO();
 	}
 
 	void Camera::Destroy()
 	{
-		m_MatrixUniformBuffer->Destroy();
-		delete m_MatrixUniformBuffer;
-
-		m_PosUniformBuffer->Destroy();
-		delete m_PosUniformBuffer;
+		m_UniformBuffer->Destroy();
 	}
 
-	void Camera::UpdateUniformBuffer()
+	void Camera::UpdateUBO()
 	{
-		m_Matrices.oldProjView = m_Matrices.projView;
-
 		glm::mat4 projMat = glm::perspective(m_Fov, m_AspectRatio, m_NearPlane, m_FarPlane);
-		glm::mat4 viewMat = glm::lookAt(m_Pos, m_Pos + m_ViewDir, m_Up);
-		m_Matrices.projView= projMat * viewMat;
+		glm::mat4 viewMat = glm::lookAt(glm::vec3(0,0,0), glm::vec3(m_ViewDir), m_Up);
+		// invert before applying translation, better numerical stability.
+		glm::mat4 viewMatInv = glm::inverse(viewMat);
+			
+		viewMat *= glm::translate(-m_Pos);
+		viewMatInv = glm::translate(m_Pos) * viewMatInv;
 
-		m_MatrixUniformBuffer->MapMemory(sizeof(CameraMatrices), &m_Matrices, 0, 0);
-		m_PosUniformBuffer->MapMemory(sizeof(glm::vec3), &m_Pos, 0, 0);
+		m_UboData.m_Pos = m_Pos;
+		m_UboData.m_projView = projMat * viewMat;
+		m_UboData.m_projViewInv = glm::dmat4(viewMatInv) * glm::inverse(glm::dmat4(projMat));
+		m_UboData.m_Near = m_NearPlane;
+		m_UboData.m_Far = m_FarPlane;
+		m_UboData.m_Width = m_Width;
+		m_UboData.m_Height = m_Height;
+		m_UniformBuffer->MapMemory(sizeof(CamParams), &m_UboData, 0, 0);
+	}
+
+	void Camera::RenderImgui()
+	{
+		ImGui::Begin("Cam");
+
+		ImGui::DragFloat("Height", &m_Pos.y, 1000000, 10, 1000000000, "%g", ImGuiSliderFlags_Logarithmic);
+		ImGui::DragFloat("zenith", &m_Zenith, 0.001, -FLT_MAX, FLT_MAX);
+
+		ImGui::End();
 	}
 
 	void Camera::Move(const glm::vec3& move)
@@ -236,6 +230,8 @@ namespace en
 		if (height == 0)
 			height = 1;
 		m_AspectRatio = static_cast<float>(width) / static_cast<float>(height);
+		m_Width = width;
+		m_Height = height;
 	}
 
 	float Camera::GetFov() const

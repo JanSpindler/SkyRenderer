@@ -1,8 +1,10 @@
 #pragma once
+
 #include "engine/graphics/vulkan/Buffer.hpp"
 #include <glm/common.hpp>
 #include <glm/glm.hpp>
 #include <vulkan/vulkan_core.h>
+
 // properly aligned by default!
 struct SunData {
 	glm::vec3 m_Color;
@@ -13,31 +15,32 @@ struct SunData {
 
 namespace en {
 	class Sun {
-	public:
-		static void Init();
-		static void Shutdown();
+		public:
+			static void Init();
+			static void Destroy();
 
-		Sun(float zenith, float azimuth, glm::vec3 color);
-		
-		void Destroy();
+			Sun(float zenith, float azimuth, glm::vec3 color);
+			~Sun();
 
-		void SetZenith(float z);
-		void SetAzimuth(float a);
-		void SetColor(glm::vec3 c);
+			void SetZenith(float z);
+			void SetAzimuth(float a);
+			void SetColor(glm::vec3 c);
 
-		VkDescriptorSetLayout GetDescriptorSetLayout() const;
-		VkDescriptorSet GetDescriptorSet() const;
+			float GetZenith() const;
 
-		void RenderImgui();
+			VkDescriptorSetLayout GetDescriptorSetLayout() const;
+			VkDescriptorSet GetDescriptorSet() const;
 
-	private:
-		static VkDescriptorSetLayout m_DescriptorSetLayout;
-		static VkDescriptorPool m_Pool;
+			void RenderImgui();
 
-		SunData m_SunData;
-		VkDescriptorSet m_DescriptorSet;
-		vk::Buffer m_UniformBuffer;
+		private:
+			static VkDescriptorSetLayout m_DescriptorSetLayout;
+			static VkDescriptorPool m_Pool;
 
-		void UpdateBuffer();
+			SunData m_SunData; 
+			VkDescriptorSet m_DescriptorSet;
+			vk::Buffer m_UniformBuffer;
+
+			void UpdateBuffer();
 	};
 }

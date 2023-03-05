@@ -175,9 +175,9 @@ namespace en
                 diffuseColor = glm::vec4(aiDiffuseColor.r, aiDiffuseColor.g, aiDiffuseColor.b, aiDiffuseColor.a);
             Log::Info("\t\t\tDiffuse Color (" +
                 std::to_string(diffuseColor.r) + ", " +
-                std::to_string(diffuseColor.r) + ", " +
-                std::to_string(diffuseColor.r) + ", " +
-                std::to_string(diffuseColor.r) + ")");
+                std::to_string(diffuseColor.g) + ", " +
+                std::to_string(diffuseColor.b) + ", " +
+                std::to_string(diffuseColor.a) + ")");
 
             // Diffuse Textures
             uint32_t diffuseTexCount = aiMat->GetTextureCount(aiTextureType_DIFFUSE);
@@ -234,7 +234,7 @@ namespace en
         // Create Descriptor Pool
         VkDescriptorPoolSize uniformBufferPoolSize;
         uniformBufferPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uniformBufferPoolSize.descriptorCount = 1;
+        uniformBufferPoolSize.descriptorCount = MAX_COUNT;
 
         std::vector<VkDescriptorPoolSize> poolSizes = { uniformBufferPoolSize };
 

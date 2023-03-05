@@ -9,6 +9,9 @@ set(CMAKE_BUILD_TYPE RelWithDebInfo)
 # Project
 project(SkyRenderer)
 
+add_compile_definitions(M_PI=3.14159)
+add_compile_definitions(M_PI_2=1.57)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -20,6 +23,7 @@ file(GLOB_RECURSE SKY_RENDERER_SOURCE "src/*.cpp")
 
 add_executable(${PROJECT_NAME} ${SKY_RENDERER_SOURCE})
 target_include_directories(${PROJECT_NAME} PUBLIC "include")
+target_include_directories(${PROJECT_NAME} PUBLIC "shared_include")
 
 # Vulkan
 find_package(Vulkan REQUIRED)

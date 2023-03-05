@@ -1,0 +1,234 @@
+#version 450
+#extension GL_EXT_debug_printf : enable
+
+#include "aerial_perspective.h"
+#include "cam_set.h"
+#include "env_set.h"
+#include "sun_set.h"
+#include "scattering.h"
+#include "gathering.h"
+#include "transmittance.h"
+#include "functions.glsl"
+
+layout (set = AP_SETS_IMAGES, binding = AP_TRANSMITTANCE_BINDING, rgba16f) uniform writeonly image3D transmittance_image;
+layout (set = AP_SETS_IMAGES, binding = AP_SCATTERING_BINDING, rgba16f) uniform writeonly image3D scattering_image;
+
+CAM_SET(AP_SETS_CAM)
+SUN_SET(AP_SETS_SUN)
+
+layout (set = AP_SETS_RATIO, binding = 0) uniform ratio_uniform_t {
+	float ratio;
+} ratio;
+
+ENV_SET(AP_SETS_ENV0, env0)
+ENV_SET(AP_SETS_ENV1, env1)
+
+layout (set = AP_SETS_TRANSMITTANCE_SAMPLER0, binding = 0) uniform sampler2D transmittance0;
+layout (set = AP_SETS_TRANSMITTANCE_SAMPLER1, binding = 0) uniform sampler2D transmittance1;
+
+layout (set = AP_SETS_GATHERING_SAMPLER0, binding = 0) uniform sampler2D gathering0;
+layout (set = AP_SETS_GATHERING_SAMPLER1, binding = 0) uniform sampler2D gathering1;
+
+float r_planet;
+float r_atmosphere;
+float atmosphere_height;
+
+float m_scale_height;
+float r_scale_height;
+
+vec3 scoeff_m;
+vec3 scoeff_r;
+vec3 extcoeff_m;
+vec3 extcoeff_r;
+vec3 extcoeff_o;
+
+vec3 to_model_vec(vec3 world_vec, float r_planet) {
+	// shift coordinate system r_planet units down
+	// <=> shift vector r_planet units up.
+	return world_vec + vec3(0, r_planet, 0);
+}
+
+vec3 mixed_transmittance(vec3 pos, float sun_cos) {
+	// no attenuation in space.
+	return length(pos) > r_atmosphere ? vec3(1) : mix(
+		fetch_transmittance(
+			pos,
+			sun_cos,
+			r_planet,
+			atmosphere_height,
+			vec2(TRANSMITTANCE_RESOLUTION_HEIGHT, TRANSMITTANCE_RESOLUTION_VIEW),
+			transmittance0),
+		fetch_transmittance(
+			pos,
+			sun_cos,
+			r_planet,
+			atmosphere_height,
+			vec2(TRANSMITTANCE_RESOLUTION_HEIGHT, TRANSMITTANCE_RESOLUTION_VIEW),
+			transmittance1),
+		ratio.ratio);
+}
+
+vec3 transmittance_from_density(float dens_m, float dens_r, float dens_o) {
+	return exp(-(dens_m*extcoeff_m + dens_r*extcoeff_r + dens_o*extcoeff_o));
+}
+
+// o+ret*u is intersection-point.
+// https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
+double sphere_intersect(dvec3 o, dvec3 u, dvec3 c, double r) {
+	dvec3 sphere_relative = o - c;
+	double a = dot(u, sphere_relative);
+	double center_dist = length(sphere_relative);
+	double under_root = a*a - center_dist*center_dist + r*r;
+	if (under_root < 0)
+		// no intersection.
+		return INFINITY;
+	else {
+		double res = -a-sqrt(under_root);
+		if (res < 0) return INFINITY;
+		return res;
+	}
+}
+
+vec4 fetch_gathering(vec3 p, float c_sun) {
+	vec2 coord = tex_address_shifted(
+		vec2(height_to_tex(height(p, r_planet), atmosphere_height), sun_to_tex(c_sun)),
+		vec2(GATHERING_RESOLUTION_HEIGHT, GATHERING_RESOLUTION_SUN));
+
+	// no gathering above atmosphere.
+	return length(p) > r_atmosphere ? vec4(0) : mix(
+		texture(gathering0, coord),
+		texture(gathering1, coord),
+		ratio.ratio);
+}
+
+// returns whether the function should exit early (makes sense when the ray reached earth-surface).
+// TODO: linear interpolation will be slightly wrong.
+void integration_step(vec3 start_pos, float step_length, vec3 step_dir, inout float dens_m_prev, inout float dens_r_prev, inout float dens_o_prev, inout float dens_m_sum, inout float dens_r_sum, inout float dens_o_sum, inout vec4 insc_prev, inout vec4 insc_sum, ivec3 tex_coord) {
+	for (int i = 1; i <= AP_STEPS_PER_CELL; ++i) {
+		vec3 pos = start_pos + i*step_length*step_dir;
+
+		// early return: if pos is under earth-surface, transmittance and gathering won't be correct.
+		if (height(pos, r_planet) < 0) 
+			break;
+		float pos_sun_cos = dot(normalize(pos), sun.sun_dir);
+
+		float dens_m = density_m(height(pos, r_planet), m_scale_height);
+		float dens_r = density_r(height(pos, r_planet), r_scale_height);
+		float dens_o = density_o(height(pos, r_planet), r_scale_height);
+
+		dens_m_sum += (dens_m_prev + dens_m) / 2.0f * step_length;
+		dens_r_sum += (dens_r_prev + dens_r) / 2.0f * step_length;
+		dens_o_sum += (dens_o_prev + dens_o) / 2.0f * step_length;
+
+		dens_m_prev = dens_m;
+		dens_r_prev = dens_r;
+		dens_o_prev = dens_o;
+
+		bool no_earth_intersect = sphere_intersect(dvec3(pos), dvec3(sun.sun_dir), dvec3(0,0,0), r_planet) == INFINITY;
+
+		// no scattering transmitted at all if the sun isn't visible.
+		vec3 transmittance_sun = no_earth_intersect ?
+			mixed_transmittance(pos, pos_sun_cos) :
+			vec3(0);
+
+		// get via integral from eye to current position.
+		vec3 transmittance_eye_pos = transmittance_from_density(dens_m_sum, dens_r_sum, dens_o_sum);
+
+		vec4 insc =
+			// transmittance from eye to position is applied to single- and multi-scattering.
+			vec4(transmittance_eye_pos, transmittance_eye_pos.r) * (
+				vec4(vec3(dens_r), dens_m) * (vec4(transmittance_sun, transmittance_sun.r) +
+				fetch_gathering(pos, pos_sun_cos)) );
+		// if (tex_coord.xyz == ivec3(8,8,8))
+		// 	debugPrintfEXT("%i :: %v4f : %f : %v3f : %v4f : %v3f", tex_coord.z, insc, dens_r_sum, transmittance_eye_pos, fetch_gathering(pos, pos_sun_cos), transmittance_sun);
+
+		insc_sum += (insc_prev+insc)/2.0f * step_length;
+
+		insc_prev = insc;
+	}
+
+	vec3 transmittance_total = transmittance_from_density(dens_m_sum, dens_r_sum, dens_o_sum);
+	vec4 inscattering_total = vec4(insc_sum.rgb*scoeff_r, insc_sum.a*scoeff_m.r)/(4.0f*pi);
+
+	// debugPrintfEXT("%v3i : %v3f", tex_coord, inscattering_total_total);
+	// format is rgba16f, add 0 in alpha.
+	imageStore(transmittance_image, tex_coord, vec4(transmittance_total, 0));
+	imageStore(scattering_image, tex_coord, vec4(inscattering_total));
+}
+
+void main() {
+	r_planet = mix(env0.r_planet, env1.r_planet, ratio.ratio);
+	r_atmosphere = mix(env0.r_atmosphere, env1.r_atmosphere, ratio.ratio);
+	atmosphere_height = mix(env0.atmosphere_height, env1.atmosphere_height, ratio.ratio);
+
+	m_scale_height = mix(env0.mie_scale_height, env1.mie_scale_height, ratio.ratio);
+	r_scale_height = mix(env0.rayleigh_scale_height, env1.rayleigh_scale_height, ratio.ratio);
+
+	scoeff_m = mix(env0.mie_scattering_coefficient, env1.mie_scattering_coefficient, ratio.ratio);
+	scoeff_r = mix(env0.rayleigh_scattering_coefficient, env1.rayleigh_scattering_coefficient, ratio.ratio);
+
+	extcoeff_m = scoeff_m/0.9f;
+	extcoeff_r = scoeff_r;
+	extcoeff_o = mix(env0.ozone_extinction_coefficient, env1.ozone_extinction_coefficient, ratio.ratio);
+
+	// x \in [0,1].
+	float x = float(gl_WorkGroupID.x)/float(AP_X-1);
+	// y \in [0,1].
+	float y = float(gl_WorkGroupID.y)/float(AP_Y-1);
+	ivec3 tex_coord = ivec3(gl_WorkGroupID.xy, 0);
+
+	// find viewing-direction via near plane.
+	dvec4 near_world_pos_temp = cam.proj_view_mat_inv * dvec4(x, y, 0, 1);
+	// needed later.
+	vec3 near_world_pos = vec3(near_world_pos_temp.xyz/near_world_pos_temp.w);
+	vec3 eye_near = vec3(near_world_pos_temp.xyz/near_world_pos_temp.w - dvec3(cam.pos));
+	// step_near will only be used for stepping from eye to near plane.
+	float step_near_length = length(eye_near)/AP_STEPS_PER_CELL;
+	vec3 step_near_dir = normalize(eye_near);
+
+	dvec4 far_world_pos = cam.proj_view_mat_inv * dvec4(x, y, 1, 1);
+	vec3 near_far = vec3(far_world_pos.xyz/far_world_pos.w - near_world_pos);
+	// steps between near and far plane.
+	float step_far_length = length(near_far)/(AP_STEPS_PER_CELL*AP_Z);
+	vec3 step_far_dir = normalize(near_far);
+
+	// TODO: project down into 2D (eg. the model) early on.
+	vec3 model_cam = to_model_vec(cam.pos, r_planet);
+
+	float dens_m_sum = 0;
+	float dens_r_sum = 0;
+	float dens_o_sum = 0;
+
+	vec4 insc_sum = vec4(0);
+
+	float dens_m_prev = density_m(height(model_cam, r_planet), m_scale_height);
+	float dens_r_prev = density_r(height(model_cam, r_planet), r_scale_height);
+	float dens_o_prev = density_o(height(model_cam, r_planet), r_scale_height);
+
+	// check if light arrives at position, if not there's no scattering from sun.
+	bool no_earth_intersect = sphere_intersect(dvec3(model_cam), dvec3(sun.sun_dir), dvec3(0,0,0), r_planet) == INFINITY;
+
+	// no scattering transmitted at all if the sun isn't visible.
+	vec3 transmittance_sun = no_earth_intersect ?
+		mixed_transmittance(model_cam, dot(normalize(model_cam), sun.sun_dir)) :
+		vec3(0);
+
+	//light scatters directly into eye, so there's no transmittance from scatter-point to eye,
+	//only that from atmosphere to scatter-point.
+	//
+	// gathering contains compressed scatterings vec4(rayleigh.rgb, mie.r), fill density accordingly.
+	// (not converting back into separate vec3s' doesn't seem to worsen result).
+	vec4 insc_prev = vec4(vec3(dens_r_prev), dens_m_prev) * (
+		vec4(transmittance_sun, transmittance_sun.r) + 
+		fetch_gathering(model_cam, dot(normalize(model_cam), sun.sun_dir)) );
+
+	// one step from eye to near plane.
+	// tex_coord.z is 0.
+	integration_step(model_cam, step_near_length, step_near_dir, dens_m_prev, dens_r_prev, dens_o_prev, dens_m_sum, dens_r_sum, dens_o_sum, insc_prev, insc_sum, tex_coord);
+	vec3 start = to_model_vec(near_world_pos, r_planet);
+	for (int i = 1; i != AP_Z; ++i) {
+		tex_coord.z = i;
+		integration_step(start, step_far_length, step_far_dir, dens_m_prev, dens_r_prev, dens_o_prev, dens_m_sum, dens_r_sum, dens_o_sum, insc_prev, insc_sum, tex_coord);
+		start += step_far_dir*AP_STEPS_PER_CELL*step_far_length;
+	}
+}

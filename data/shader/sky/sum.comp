@@ -1,0 +1,21 @@
+#version 450
+#extension GL_EXT_debug_printf : enable
+
+#include "scattering.h"
+#include "sum.h"
+
+layout (set = SUM_SETS_SAMPLE, binding = 0) uniform sampler3D tex[SCATTERING_ORDERS];
+layout (set = SUM_SETS_STORE, binding = 0, rgba16f) uniform writeonly image3D target_image;
+
+void main() {
+	float tex_height = float(gl_WorkGroupID.x)/SCATTERING_RESOLUTION_HEIGHT;
+	float tex_view = float(gl_WorkGroupID.y)/SCATTERING_RESOLUTION_VIEW;
+	float tex_sun = float(gl_WorkGroupID.z)/SCATTERING_RESOLUTION_SUN;
+
+	vec4 total = vec4(0,0,0,0);
+	for (uint i = 0; i != SCATTERING_ORDERS; ++i) {
+		total += texture(tex[i], vec3(tex_height, tex_view, tex_sun));
+	}
+
+	imageStore(target_image, ivec3(gl_WorkGroupID), total);
+}

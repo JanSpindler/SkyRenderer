@@ -8,6 +8,7 @@ const std::string shaderDirPath = "data/shader/";
 
 namespace en::vk
 {
+	Shader::Shader() {}
 	Shader::Shader(const std::vector<char>& code)
 	{
 		Create(code);
@@ -17,12 +18,17 @@ namespace en::vk
 	{
 		std::string fullFilePath = shaderDirPath + fileName;
 
-		std::string outputFileName = fullFilePath;
+		std::string outputFileName = fullFilePath + ".spv";
 
 		if (!compiled)
 		{
-			outputFileName += ".spv";
-			std::string command = compilerPath + " " + fullFilePath + " -o " + outputFileName;
+			std::string command = compilerPath + " " +
+			                      fullFilePath +
+			                      " -o " + outputFileName +
+			                      " -I shared_include" +
+			                      // shaderDirPath includes '/'.
+			                      " -I " + shaderDirPath + "include" +
+			                      " -O -I " + shaderDirPath + "generated";
 			Log::Info("Shader Compile Command: " + command);
 
 			// Compile

@@ -79,7 +79,7 @@ namespace en
         else if (downPressed && !upPressed)
             camMove.y = -camMoveSpeed;
 
-        if (en::Input::IsKeyPressed(KEY_LEFT_SHIFT))
+        if (IsKeyPressed(KEY_LEFT_SHIFT))
             camMove *= 10.0f;
 
         if (camMove != glm::vec3(0.f, 0.f, 0.f))

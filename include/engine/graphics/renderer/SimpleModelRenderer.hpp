@@ -1,19 +1,22 @@
 #pragma once
 
+#include "engine/graphics/GroundLighting.hpp"
+#include "engine/graphics/vulkan/Swapchain.hpp"
 #include <engine/graphics/Common.hpp>
 #include <engine/graphics/vulkan/Shader.hpp>
 #include <engine/graphics/vulkan/CommandPool.hpp>
+#include <engine/graphics/Subpass.hpp>
 #include <engine/objects/Model.hpp>
 #include <engine/graphics/Camera.hpp>
+#include <engine/graphics/Sun.hpp>
 
 namespace en
 {
-	class SimpleModelRenderer
-	{
+	class SimpleModelRenderer : public Subpass {
 	public:
-		SimpleModelRenderer(uint32_t width, uint32_t height, const Camera* camera);
+		SimpleModelRenderer(uint32_t width, uint32_t height, const Camera* camera, const Sun* sun, const GroundLighting &gl, size_t max_concurrent);
 
-		void Render(VkQueue queue) const;
+		void Render(VkQueue queue, size_t imageIndx) const;
 		void Destroy();
 
 		void ResizeFrame(uint32_t width, uint32_t height);
@@ -21,49 +24,54 @@ namespace en
 		void AddModelInstance(const ModelInstance* modelInstance);
 		void RemoveModelInstance(const ModelInstance* modelInstance);
 
-		VkImage GetColorImage() const;
-		VkImageView GetColorImageView() const;
+		std::vector<VkImage> GetColorImages() const;
+		std::vector<VkImageView> GetColorImageViews() const;
 
 		void SetImGuiCommandBuffer(VkCommandBuffer imGuiCommandBuffer);
 
+		void RecordCommandBuffers();
+
 	private:
-		VkCommandBuffer m_ImGuiCommandBuffer = VK_NULL_HANDLE;
+		size_t m_MaxConcurrent;
 
 		std::vector<const ModelInstance*> m_ModelInstances;
 
 		uint32_t m_FrameWidth;
 		uint32_t m_FrameHeight;
 		const Camera* m_Camera;
+		const Sun* m_Sun;
+		const GroundLighting &m_GroundLighting;
 
 		VkRenderPass m_RenderPass;
+		uint32_t m_Subpass;
+		std::vector<VkFramebuffer> m_Framebuffers;
+
 		vk::Shader m_VertShader;
 		vk::Shader m_FragShader;
 		VkPipelineLayout m_PipelineLayout;
 		VkPipeline m_Pipeline;
 
-		VkFormat m_ColorFormat;
-		VkImage m_ColorImage;
-		VkDeviceMemory m_ColorImageMemory;
-		VkImageView m_ColorImageView;
-
-		VkFormat m_DepthFormat;
-		VkImage m_DepthImage;
-		VkDeviceMemory m_DepthImageMemory;
-		VkImageView m_DepthImageView;
-
-		VkFramebuffer m_Framebuffer;
 		vk::CommandPool m_CommandPool;
-		VkCommandBuffer m_CommandBuffer;
+		std::vector<VkCommandBuffer> m_CommandBuffers;
 
-		void FindFormats();
-		void CreateRenderPass(VkDevice device);
+		// void FindFormats();
 		void CreatePipelineLayout(VkDevice device);
-		void CreatePipeline(VkDevice device);
+		void CreatePipeline(size_t subpass, const VkRenderPass renderPass) override;
+		void CreateCommandBuffers();
 
-		void CreateColorImageObjects(VkDevice device);
-		void CreateDepthImageObjects(VkDevice device);
-		void CreateFramebuffer(VkDevice device);
-		void CreateCommandBuffer();
-		void RecordCommandBuffer();
+		std::pair<VkSubpassDescription, VkSubpassContents> GetSubpass(
+			size_t subpass_indx,
+			const VkAttachmentReference &color_attachment,
+			const VkAttachmentReference &depth_attachment,
+			const VkAttachmentReference &swapchain_attachment) override;
+
+		void RecordFrameCommandBuffer(VkCommandBuffer buf, size_t frame_indx) override;
+
+		void AllocateResources(
+			std::vector<VkImageView> &colorImageViews,
+			std::vector<VkImageView> &depthImageViews,
+			std::vector<VkImageView> &swapchainImageViews,
+			std::vector<VkFramebuffer> &framebuffers,
+			VkRenderPass renderpass) override;
 	};
 }

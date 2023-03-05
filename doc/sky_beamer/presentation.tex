@@ -1,0 +1,589 @@
+\documentclass[german]{beamer}
+\usepackage{mathtools}
+\usepackage{babel}
+
+\usepackage{csquotes}
+\usepackage{float}
+
+\usepackage{tikz}
+\usetikzlibrary{intersections, positioning, calc, fit}
+
+\usepackage{graphicx}
+\graphicspath{{./media/}}
+
+\usepackage{pgfplots}
+\usepgfplotslibrary{polar}
+
+\title{Dynamisches Himmel-Rendering}
+\author{Simon Katz}
+\institute{Rheinische Friedrich-Wilhelms-Universität Bonn}
+\date{02.03.2022}
+
+% from https://tex.stackexchange.com/questions/66216/draw-arc-in-tikz-when-center-of-circle-is-specified
+\def\centerarc[#1](#2)(#3:#4:#5);%
+%Syntax: [draw options] (center) (initial angle:final angle:radius)
+    {
+    %\draw[#1] ($(#2)+({#5*cos(#3)},{#5*sin(#3)})$) arc (#3:#4:#5);
+    \draw[#1]([shift=(#3:#5)]#2) arc (#3:#4:#5);
+    }
+
+% from https://tex.stackexchange.com/questions/354746/pgfplots-with-function-definition-and-then-use-it-by-replacing-a-constant
+\pgfplotsset{
+	compat=1.12,
+	/pgf/declare function={
+		F_M(\t,\g) = ((3*(1-\g^2))/(3*(2+2*\g^2))*(1+cos(\t)^2)/(1+\g^2-2*\g*cos(\t))^1.5);
+		F_R(\t) = (8/10)*(7/5+1/2*cos(\t)^2)
+	}
+}
+
+
+\begin{document}
+
+\frame{\titlepage}
+
+\begin{frame}
+\frametitle{Inhalt}
+\tableofcontents
+\end{frame}
+
+\section{Grundlagen}
+
+\begin{frame}
+\frametitle{Grundlagen: Atmosphäre}
+
+\begin{itemize}
+	\item Atmosphäre besteht aus Partikeln (Moleküle und Aerosole)
+	\item Licht wird abhängig von Wellenlänge gestreut
+	\item Streuung sowohl ins Auge, als auch aus dem Pfad zum Auge heraus
+	\item Absorption durch Aerosole
+\end{itemize}
+
+\begin{figure}[h]
+	\centering
+	\begin{tikzpicture}
+	\useasboundingbox (0.0) rectangle (8.4,4.9);
+	\begin{scope}[transform canvas={scale=0.7}]
+	\clip (0,0) rectangle (12,7);
+	\filldraw[fill=blue!20] (1, -10) circle (16);
+	\filldraw[fill=green!20] (1, -10) circle (11);
+
+	\path[name path=atmosphere] (1, -10) circle (16);
+
+	\coordinate (eye) at (1, 2);
+	\centerarc[thick](eye)(20:-10:.4);
+	\draw[] (eye) -- ($(eye) + .5*({cos(20)}, {sin(20)})$);
+	\draw[] (eye) -- ($(eye) + .5*({cos(-10)}, {sin(-10)})$);
+	\path[name path=view] (eye) -- ($(eye) + 10*({cos(5)}, {sin(5)})$);
+
+	\path[name path=eye_c1] (eye) circle (.55);
+
+	\path[name path=eye_c2] (eye) circle (1.7);
+	\path[name path=eye_forw1] (eye) -- ($(eye) + 10*({cos(13)}, {sin(13)})$);
+	\node[name intersections={of=eye_c1 and eye_forw1}] (eye_c1_i1) at (intersection-1) {};
+	\node[name intersections={of=eye_c2 and eye_forw1}] (eye_c2_i1) at (intersection-1) {};
+
+	\path[name path=eye_c3] (eye) circle (3.5);
+	\path[name path=eye_forw2] (eye) -- ($(eye) + 10*({cos(0)}, {sin(0)})$);
+	\node[name intersections={of=eye_c1 and eye_forw2}] (eye_c1_i2) at (intersection-1) {};
+	\node[name intersections={of=eye_c3 and eye_forw2}] (eye_c3_i1) at (intersection-1) {};
+
+	\path[name path=eye_c4] (eye) circle (5);
+	\path[name path=eye_forw3] (eye) -- ($(eye) + 10*({cos(-9)}, {sin(-9)})$);
+	\node[name intersections={of=eye_c1 and eye_forw3}] (eye_c1_i3) at (intersection-1) {};
+	\node[name intersections={of=eye_c4 and eye_forw3}] (eye_c4_i1) at (intersection-1) {};
+
+	% \coordinate(pb) at (intersection 1 of atmosphere and view);
+
+	\coordinate (p1) at (3.8, 4);
+	\path[name path=pp1] (p1) -- ($(p1) + 10*({cos(40)}, {sin(40)})$);
+	\draw[->, dashed, name intersections={of=atmosphere and pp1}]
+		(intersection-1) --
+		(p1) --
+		(eye_c2_i1.center) --
+		(eye_c1_i1.center);
+
+	\path[name path=pp2] (eye_c3_i1.center) -- ($(eye_c3_i1.center) + 10*({cos(40)}, {sin(40)})$);
+	\draw[->, dashed, name intersections={of=atmosphere and pp2}]
+		(intersection-1) --
+		(eye_c3_i1.center) --
+		(eye_c1_i2.center);
+
+	\coordinate (out_mid) at ($(eye_c4_i1.center)!.8!(eye_c1_i3.center)$);
+	\path[name path=pp3] (eye_c4_i1.center) -- ($(eye_c4_i1.center) + 10*({cos(40)}, {sin(40)})$);
+	\draw[->, dashed, name intersections={of=atmosphere and pp3}]
+		(intersection-1) --
+		(eye_c4_i1.center) --
+		(out_mid) -- (.5, 1.6);
+
+	\coordinate (l2) at ($(1, -10) + 16.5*({cos(73)}, {sin(73)})$);
+	\draw[thick, <-, yellow!80!orange] (l2) -- ++($({cos(40)}, {sin(40)})$);
+	
+	\coordinate (l1) at ($(1, -10) + 16.5*({cos(69)}, {sin(69)})$);
+	\draw[thick, <-, yellow!80!orange] (l1) -- ++($({cos(40)}, {sin(40)})$);
+	
+	\coordinate (l3) at ($(1, -10) + 16.5*({cos(64)}, {sin(64)})$);
+	\draw[thick, <-, yellow!80!orange] (l3) -- ++($({cos(40)}, {sin(40)})$);
+	
+	\coordinate (l4) at ($(1, -10) + 16.5*({cos(59)}, {sin(59)})$);
+	\draw[thick, <-, yellow!80!orange] (l4) -- ++($({cos(40)}, {sin(40)})$);
+	
+	\coordinate (l5) at ($(1, -10) + 16.5*({cos(56)}, {sin(56)})$);
+	\draw[thick, <-, yellow!80!orange] (l5) -- ++($({cos(40)}, {sin(40)})$);
+
+	\end{scope}
+	\end{tikzpicture}
+	% \caption{Mehrfache-, Einfache- und Ausstreuung}
+	\label{streuung}
+\end{figure}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Grundlagen: Aerial Perspective}
+
+\begin{itemize}
+	\item Aus der Atmosphäre gestreutes Licht attenuiert Farbe weit entfernter Objekte
+\end{itemize}
+
+\begin{figure}[h]
+	{\centering
+	\begin{tikzpicture}
+	\useasboundingbox (0.0) rectangle (8.4,4.9);
+	\begin{scope}[transform canvas={scale=0.7}]
+	\fill[fill=blue!20] (0,0) rectangle (12,7);
+	\fill[fill=green!20] (0,0) rectangle (12,1);
+
+	\coordinate (eye) at (1, 2);
+	\centerarc[thick](eye)(20:-10:.4);
+	\draw[] (eye) -- ($(eye) + .5*({cos(20)}, {sin(20)})$);
+	\draw[] (eye) -- ($(eye) + .5*({cos(-10)}, {sin(-10)})$);
+	\coordinate (eye_to) at ($(eye) + 10*({cos(10)}, {sin(10)})$);
+	\path[name path=view] (eye) -- (eye_to);
+
+	\path[name path=tri, fill=red] (8,1) -- (9.5,5) -- (11,1) -- cycle;
+
+	\draw[dashed, red] ($(eye)!0.79!(eye_to)$) -- ($(eye)!0.70!(eye_to)$);
+	\draw[dashed, orange] ($(eye)!0.71!(eye_to)$) -- ($(eye)!0.40!(eye_to)$);
+	\draw[dashed, orange!70!blue] ($(eye)!0.395!(eye_to)$) -- ($(eye)!0.25!(eye_to)$);
+	\draw[->, dashed, orange!60!blue] ($(eye)!0.25!(eye_to)$) -- ($(eye)!0.05!(eye_to)$);
+
+	\coordinate (p1) at ($(eye)!0.70!(eye_to)$);
+	\draw[->, dashed, yellow] ($(p1) + 2*({cos(55)}, {sin(55)})$) -- (p1);
+	\node[below=1mm of p1] {$p_1$};
+
+	\coordinate (p2) at ($(eye)!0.40!(eye_to)$);
+	\draw[->, dashed, blue] ($(p2) + ({cos(320)}, {sin(320)})$) -- (p2);
+	\node[below=1mm of p2] {$p_2$};
+
+	\coordinate (p3) at ($(eye)!0.25!(eye_to)$);
+	\draw[<-, dashed, orange!70!blue] ($(p3) + ({cos(170)}, {sin(170)})$) -- (p3);
+	\node[below=1mm of p3] {$p_3$};
+
+	\end{scope}
+	\end{tikzpicture}
+	}
+
+	% \caption{Aerial Perspective}
+	\label{AP}
+\end{figure}
+
+\end{frame}
+
+\section{Einfluss der Atmosphäre}
+
+\begin{frame}
+\frametitle{Einfluss der Atmosphäre}
+
+\includegraphics<1>[scale=0.12]{nogl_noap_nosun_noat.png}
+
+\includegraphics<2>[scale=0.12]{nogl_noap_nosun.png}
+
+\includegraphics<3>[scale=0.12]{nogl_noap.png}
+
+\includegraphics<4>[scale=0.12]{nogl.png}
+
+\includegraphics<5>[scale=0.12]{full.png}
+
+\end{frame}
+
+\section{Physikalische Umsetzung}
+
+\begin{frame}
+\frametitle{Streuung}
+
+\begin{itemize}
+	\item Alle Streuungen werden durch Mie- oder Rayleigh-Streuung modelliert
+	\item Bei Partikeln mit $d \ll \frac{\lambda}{2\pi}$ (Lufmoleküle): Rayleigh, streut fast uniform
+	\item Staub, Eis, Wassertropfen: Mie, starke Vorwärtsstreuung
+	\item Rayleigh streut Wellenlängenabhängig, Mie nicht
+\end{itemize}
+
+\centering
+\vspace{1.7em}
+\includegraphics[scale=0.2]{scattering.png}
+
+\end{frame}
+
+\section{Mathematisches Modell}
+
+\begin{frame}
+\frametitle{Mathematisches Modell}
+
+\begin{itemize}
+\item Ziel: Die Intensität des Lichtes einer Wellenlänge $\lambda$, welches an einer Position $p$ mit einer
+Blickrichtung $v$ einfällt.
+\item Addiere Intensität für alle Streuungsordnungen
+\item Vereinfachungen: Sonne als einzige Lichtquelle, die Strahlen dieser sind parallel
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Mathematisches Modell: Einzelne Streuung}
+
+\begin{itemize}
+	\item Modelliere zunächst eine einzelne Streuung
+	\item Licht fällt bei $p$ aus $i$ ein und wird Richtung $o$ gestreut ($\theta = \angle(i,o)$)
+	\item $\rho$: Dichtefunktion
+	\item $F$: Phase function
+	\item $\beta$: Streuungskoeffizient
+\end{itemize}
+
+\begin{equation*}
+	S_{R,M}(p, i, o, \lambda) = \rho_{R,M}(p)F_{R,M}(\theta)\frac{\beta_{R,M}(\lambda)}{4\pi}
+\end{equation*}
+\begin{equation*}
+	S(p, i, o, \lambda) = S_R(p,i,o,\lambda) + S_M(p,i,o,\lambda)
+\end{equation*}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Mathematisches Modell: Transmittance}
+
+\begin{itemize}
+	\item Transmittance modelliert Dämpfung durch die Atmosphäre zwischen zwei Punkten $p_a$, $p_b$
+	\item $\beta^e$: extinction coefficient, modelliert Ausstreuung (Rayleigh und Mie) und Absorption (Mie und Ozon)
+\end{itemize}
+
+\begin{equation*}
+	T(p_a, p_b, \lambda) = \exp\bigg(-\sum_{i\in R,M,O}^{} \beta^e_i(\lambda) \int_{p_a}^{p_b} \rho_i(p) \,dp\bigg)
+\end{equation*}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Mathematisches Modell: Einfachstreuung}
+
+\begin{figure}[h]
+	\centering
+	\begin{tikzpicture}
+	\useasboundingbox (0.0) rectangle (8.4,4.9);
+	\begin{scope}[transform canvas={scale=0.7}]
+	\clip (0,0) rectangle (12,7);
+	\filldraw[fill=blue!20] (1, -10) circle (16);
+	\filldraw[fill=green!20] (1, -10) circle (11);
+
+	\path[name path=atmosphere] (1, -10) circle (16);
+
+	\coordinate (eye) at (1, 2);
+	\centerarc[thick](eye)(20:-10:.4);
+	\draw[] (eye) -- ($(eye) + .5*({cos(20)}, {sin(20)})$);
+	\draw[] (eye) -- ($(eye) + .5*({cos(-10)}, {sin(-10)})$);
+	\path[name path=view] (eye) -- ($(eye) + 10*({cos(5)}, {sin(5)})$);
+
+	% \coordinate(pb) at (intersection 1 of atmosphere and view);
+
+	% \node[name intersections={of=atmospherea and view}] (intersection) {$p_b$};
+	\node[red, name intersections={of=atmosphere and view}] (pb) at (intersection-1) {};
+	\node[below=0 of pb.center] {$p_b$};
+	\draw[<-, dashed] ($(eye) + .5*({cos(5)}, {sin(5)})$) -- (pb.center);
+
+	\coordinate (p1) at ($(eye)!0.2!(pb)$);
+	\node[below=0 of eye.center] {$p_a$};
+
+	\path[name path=sun1] (p1) -- ($(p1) + 10*({cos(40)}, {sin(40)})$);
+	\node[red, name intersections={of=atmosphere and sun1}] (pl1) at (intersection-1) {};
+	\node[below=0 of p1.center] {$p_{1}$};
+	\draw[dashed] (p1) -- (pl1.center);
+	\node[below=1mm of pl1.center] {$p_{l1}$};
+
+	\coordinate (p2) at ($(eye)!0.35!(pb)$);
+	\path[name path=sun2] (p2) -- ($(p2) + 20*({cos(40)}, {sin(40)})$);
+	\node[red, name intersections={of=atmosphere and sun2}] (pl2) at (intersection-1) {};
+	\node[below=0 of p2.center] {$p_{2}$};
+	\draw[dashed] (p2) -- (pl2.center);
+	\node[below=1mm of pl2.center] {$p_{l2}$};
+
+	\coordinate (p3) at ($(eye)!0.7!(pb)$);
+	\path[name path=sun3] (p3) -- ($(p3) + 30*({cos(40)}, {sin(40)})$);
+	\node[below=0 of p3.center] {$p_{3}$};
+	\node[red, name intersections={of=atmosphere and sun3}] (pl3) at (intersection-1) {};
+	\draw[dashed] (p3) -- (pl3.center);
+	\node[below=1mm of pl3.center] {$p_{l3}$};
+
+	\coordinate (l2) at ($(1, -10) + 16.5*({cos(73)}, {sin(73)})$);
+	\draw[thick, <-, yellow!80!orange] (l2) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l1) at ($(1, -10) + 16.5*({cos(69)}, {sin(69)})$);
+	\draw[thick, <-, yellow!80!orange] (l1) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l3) at ($(1, -10) + 16.5*({cos(64)}, {sin(64)})$);
+	\draw[thick, <-, yellow!80!orange] (l3) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l4) at ($(1, -10) + 16.5*({cos(59)}, {sin(59)})$);
+	\draw[thick, <-, yellow!80!orange] (l4) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l5) at ($(1, -10) + 16.5*({cos(56)}, {sin(56)})$);
+	\draw[thick, <-, yellow!80!orange] (l5) -- ++($({cos(40)}, {sin(40)})$);
+
+	\end{scope}
+	\end{tikzpicture}
+	\label{SS-image}
+\end{figure}
+
+\begin{equation*}
+	I^{(1)}_S(p_a,v,l,\lambda) = \int_{p_a}^{p_b}  I(\lambda) T(p_l, p, \lambda)S(p, -l, -v, \lambda) T(p, p_a, \lambda) \,dp
+\end{equation*}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Mathematisches Modell: Mehrfachstreuung}
+
+\begin{itemize}
+	\item Iteratives Verfahren für Einfache Streuung $\rightarrow$ Mehrfache Streuung
+	\item Zwei Schritte: Gathering und Mehrfache Streuung (Unterteilung um nah an der Implementierung zu bleiben)
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Mathematisches Modell: Gathering}
+
+\begin{figure}
+	\centering
+	\begin{tikzpicture}
+	\useasboundingbox (0.0) rectangle (8.4,4.9);
+	\begin{scope}[transform canvas={scale=0.7}]
+	\clip (0,0) rectangle (12,7);
+	\filldraw[fill=blue!20] (1, -10) circle (16);
+	\filldraw[fill=green!20] (1, -10) circle (11);
+
+	\path[name path=atmosphere] (1, -10) circle (16);
+
+	\coordinate (eye) at (1, 2);
+
+	\node[circle, minimum size=.15cm, inner sep=0] (p2) at ($(eye)!0.35!(pb)$) {};
+	\node[minimum size=1cm, circle, label=below:$p$] (c2) at (p2) {};
+	\draw[dashed] (c2.97) -- (p2.center);
+	\draw[dashed] (c2.25) -- (p2.center);
+	\draw[dashed] (c2.169) -- (p2.center);
+	\draw[dashed] (c2.241) -- (p2.center);
+	\draw[dashed] (c2.313) -- (p2.center);
+
+	\draw[->, dashed] (p2.center) -- ($(eye)!0.25!(pb)$);
+
+	\coordinate (l2) at ($(1, -10) + 16.5*({cos(73)}, {sin(73)})$);
+	\draw[thick, <-, yellow!80!orange] (l2) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l1) at ($(1, -10) + 16.5*({cos(69)}, {sin(69)})$);
+	\draw[thick, <-, yellow!80!orange] (l1) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l3) at ($(1, -10) + 16.5*({cos(64)}, {sin(64)})$);
+	\draw[thick, <-, yellow!80!orange] (l3) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l4) at ($(1, -10) + 16.5*({cos(59)}, {sin(59)})$);
+	\draw[thick, <-, yellow!80!orange] (l4) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l5) at ($(1, -10) + 16.5*({cos(56)}, {sin(56)})$);
+	\draw[thick, <-, yellow!80!orange] (l5) -- ++($({cos(40)}, {sin(40)})$);
+
+	\end{scope}
+	\end{tikzpicture}
+	\label{MS-image}
+\end{figure}
+
+\begin{itemize}
+	\item Berechnet Intensität des $k-1$-fach gestreuten Lichtes, das an einem Punkt $p$ in Richtung $o$ gestreut wird.
+\end{itemize}
+
+\begin{equation*}
+	G^{(k)}(p,o,l,\lambda) = \int_{4\pi}^{} I^{(k-1)}(p,\omega,l,\lambda) S(p,-\omega,o,\lambda) \,d\omega
+\end{equation*}
+\end{frame}
+
+\begin{frame}
+\frametitle{Mathematisches Modell: Mehrfache Streuung}
+
+\begin{figure}
+	\centering
+	\begin{tikzpicture}
+	\useasboundingbox (0.0) rectangle (8.4,4.9);
+	\begin{scope}[transform canvas={scale=0.7}]
+	\clip (0,0) rectangle (12,7);
+	\filldraw[fill=blue!20] (1, -10) circle (16);
+	\filldraw[fill=green!20] (1, -10) circle (11);
+
+	\path[name path=atmosphere] (1, -10) circle (16);
+
+	\coordinate (eye) at (1, 2);
+	\centerarc[thick](eye)(20:-10:.4);
+	\draw[] (eye) -- ($(eye) + .5*({cos(20)}, {sin(20)})$);
+	\draw[] (eye) -- ($(eye) + .5*({cos(-10)}, {sin(-10)})$);
+	\path[name path=view] (eye) -- ($(eye) + 10*({cos(5)}, {sin(5)})$);
+
+	% \coordinate(pb) at (intersection 1 of atmosphere and view);
+
+	% \node[name intersections={of=atmospherea and view}] (intersection) {$p_b$};
+	\node[red, name intersections={of=atmosphere and view}] (pb) at (intersection-1) {};
+	\node[below=0 of pb.center] {$p_b$};
+	\draw[dashed, <-] ($(eye) + .5*({cos(5)}, {sin(5)})$) -- (pb.center);
+	\node[below=0 of eye.center] {$p_a$};
+
+	\node[circle, minimum size=.15cm, inner sep=0] (p1) at ($(eye)!0.2!(pb)$) {};
+	\node[minimum size=1cm, circle, label=below:$p_1$] (c1) at (p1) {};
+	\draw[->, dashed] (c1.72) -- (p1.72);
+	\draw[->, dashed] (c1.0) -- (p1.0);
+	\draw[->, dashed] (c1.144) -- (p1.144);
+	\draw[->, dashed] (c1.216) -- (p1.216);
+	\draw[->, dashed] (c1.288) -- (p1.288);
+
+	\node[circle, minimum size=.15cm, inner sep=0] (p2) at ($(eye)!0.35!(pb)$) {};
+	\node[minimum size=1cm, circle, label=below:$p_2$] (c2) at (p2) {};
+	\draw[->, dashed] (c2.97) -- (p2.97);
+	\draw[->, dashed] (c2.25) -- (p2.25);
+	\draw[->, dashed] (c2.169) -- (p2.169);
+	\draw[->, dashed] (c2.241) -- (p2.241);
+	\draw[->, dashed] (c2.313) -- (p2.313);
+
+	\node[circle, minimum size=.15cm, inner sep=0] (p3) at ($(eye)!0.7!(pb)$) {};
+	\node[minimum size=1cm, circle, label=below:$p_3$] (c3) at (p3) {};
+	\draw[->, dashed] (c3.121) -- (p3.121);
+	\draw[->, dashed] (c3.49) -- (p3.49);
+	\draw[->, dashed] (c3.193) -- (p3.193);
+	\draw[->, dashed] (c3.265) -- (p3.265);
+	\draw[->, dashed] (c3.337) -- (p3.337);
+
+	\coordinate (l2) at ($(1, -10) + 16.5*({cos(73)}, {sin(73)})$);
+	\draw[thick, <-, yellow!80!orange] (l2) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l1) at ($(1, -10) + 16.5*({cos(69)}, {sin(69)})$);
+	\draw[thick, <-, yellow!80!orange] (l1) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l3) at ($(1, -10) + 16.5*({cos(64)}, {sin(64)})$);
+	\draw[thick, <-, yellow!80!orange] (l3) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l4) at ($(1, -10) + 16.5*({cos(59)}, {sin(59)})$);
+	\draw[thick, <-, yellow!80!orange] (l4) -- ++($({cos(40)}, {sin(40)})$);
+
+	\coordinate (l5) at ($(1, -10) + 16.5*({cos(56)}, {sin(56)})$);
+	\draw[thick, <-, yellow!80!orange] (l5) -- ++($({cos(40)}, {sin(40)})$);
+
+	\end{scope}
+	\end{tikzpicture}
+	\label{MS-image}
+\end{figure}
+
+\begin{equation*}
+	I_S^{(k)}(p,v,l,\lambda) = \int_{p_a}^{p_b} G^{(k)}(p,-v, l, \lambda) T(p,p_a) \,dp
+\end{equation*}
+
+\begin{equation*}
+	I_S = \sum^{K}_{i=1} I_S^{(i)}
+\end{equation*}
+\end{frame}
+
+\section{Implementierung}
+
+\begin{frame}
+\frametitle{Implementierung: Vereinfachungen}
+
+\begin{itemize}
+	\item Ziel Echtzeitrendering $\rightarrow$ Vorberechnen
+	\item Annahmen um Dimensionen der Texturen zu verringern+Vorberechnung zu vereinfachen:
+		\begin{itemize}
+			\item Die Erde ist eine perfekte Kugel und $\rho_{R,M,O}(p)$ hängen nur von der Höhe von p ab:\\ 3
+			$\rightarrow$ 1 Dimension für $p$
+			\item Die Azimuth-Differenz zwischen Blick- und Sonnenwinkel wird während der Vorberechnung ignoriert und
+			mit einer modifizierten $F_R(\theta)$ zur Laufzeit ausgewertet:\\ Blickrichtung 2 $\rightarrow$ 1 Dimension
+			(Zenithwinkel), Sonnenrichtung 2 $\rightarrow$ 1 Dimension (Zenithwinkel)
+		\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Implementierung: $F_{R,M}(\theta)$}
+
+\begin{itemize}
+	\item $F_R$ (Rayleigh Phase Function): $F_R(\theta) = \frac{8}{10}(\frac{7}{5}+\frac{1}{2}\cos^2(\theta))$. Streut fast
+	uniform
+	\item $F_M$ (Mie Phase Function, hier modifizierte Henyey-Greenstein Funktion): $F_M(\theta) =
+	\frac{3(1-g^2)}{3(2+2g^2)} \frac{(1+\cos^2(\theta))}{(1+g^2-2g\cos(\theta))^{\frac{3}{2}}}$, hat eine starke, von
+	$g$ bestimmte, Vorwärtsstreuung. Abgebildet mit $g=0.2,0.4,0.6$
+\end{itemize}
+
+\begin{tabular}{c c}
+\begin{tikzpicture}
+	\begin{polaraxis}[
+		xmin=0, xmax=180,
+		width=5cm,
+		ytick style={draw=none},
+		yticklabel style={
+			anchor=north,
+			yshift=-0.3*\pgfkeysvalueof{/pgfplots/major tick length}
+		},
+		% legend style={
+		% 	at={(.1,.1)},
+		% 	anchor=north east
+		% }
+	]
+	\addplot+[mark=none,domain=0:360,samples=600] {F_M(x, .2)};
+	\addplot+[mark=none,domain=0:360,samples=600] {F_M(x, .4)};
+	\addplot+[mark=none,domain=0:360,samples=600] {F_M(x, .6)};
+	% \legend{$g=0.2$, $g=0.4$, $g=0.6$}
+	\end{polaraxis}
+\end{tikzpicture}
+ & 
+\begin{tikzpicture}
+	\begin{polaraxis}[
+		xmin=0, xmax=180,
+		width=5cm,
+		ytick style={draw=none},
+		yticklabel style={
+			anchor=north,
+			yshift=-0.3*\pgfkeysvalueof{/pgfplots/major tick length}
+		}
+	]
+	\addplot+[mark=none,domain=0:360,samples=600] {F_R(x)};
+	\addplot+[mark=none,domain=0:360,samples=600] {F_R(x)};
+	\addplot+[mark=none,domain=0:360,samples=600] {F_R(x)};
+	\end{polaraxis}
+\end{tikzpicture}
+\end{tabular}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Implementierung: $\beta_{R,M}(\lambda)$}
+
+\begin{itemize}
+	\item Rayleigh: kann mit $\beta_R(\lambda) = 8\pi^3 \frac{(n^2-1)^2}{3N_e\lambda^4}$ bestimmt werden ($N_e$:
+	molekulare Dichte auf Meeresspiegel, $n$: refraktiver Index der Luft). Hier $\beta_{R_\text{RGB}}=(6.55e^{-6}, 1.73e^{-5},
+	2.30e^{-5})$ für $\lambda_\text{RGB}=(650,510,475)\text{nm}$, $N_e = 2.545e^{25}$, $n = 1.0003$.
+	\item Mie: kompliziertere Berechnung, hier einfach $\beta_M=(2e^{-6},2e^{-6},2e^{-6})$ (Wellenlängenunabhängig!)
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Implementierung: Umsetzung}
+
+\begin{itemize}
+	\item Streuung wird für die RGB entsprechenden Wellenlängen (hier: 650,510,475nm) bestimmt
+	\item Atmosphäre wird auf Far Plane gezeichnet
+\end{itemize}
+
+\end{frame}
+
+
+\end{document}

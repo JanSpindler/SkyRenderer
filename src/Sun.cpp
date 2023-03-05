@@ -3,19 +3,20 @@
 #include <glm/gtx/transform.hpp>
 #include <imgui.h>
 #include <vulkan/vulkan_core.h>
+
 glm::vec3 VecFromAngles(float zenith, float azimuth) {
 	// construct using vec4, discards w.
 	return glm::vec3(
 		// azimuth starts at positive x.
 		glm::rotate(azimuth, glm::vec3(0.0f, 1.0f, 0.0f)) *
 		glm::rotate(zenith, glm::vec3(1.0f, 0.0f, 0.0f)) *
-		glm::vec4(0, 1, 0, 1)
+		glm::vec4(0,1,0,1)
 	);
 }
 
 namespace en {
 	VkDescriptorSetLayout Sun::m_DescriptorSetLayout;
-	VkDescriptorPool Sun::m_Pool;
+   	VkDescriptorPool Sun::m_Pool;
 
 	void Sun::Init() {
 		VkDevice device = VulkanAPI::GetDevice();
@@ -56,7 +57,7 @@ namespace en {
 		ASSERT_VULKAN(result);
 	}
 
-	void Sun::Shutdown() {
+	void Sun::Destroy() {
 		VkDevice device = VulkanAPI::GetDevice();
 
 		vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayout, nullptr);
@@ -68,14 +69,14 @@ namespace en {
 			color,
 			zenith,
 			VecFromAngles(zenith, azimuth),
-			azimuth },
-			m_UniformBuffer{ vk::Buffer(
-				sizeof(SunData),
-				VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-				{}
-			) }
+			azimuth},
+		m_UniformBuffer{vk::Buffer(
+			sizeof(SunData),
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			{}
+		)}
 	{
 		VkDevice device = VulkanAPI::GetDevice();
 
@@ -113,25 +114,29 @@ namespace en {
 		m_UniformBuffer.MapMemory(sizeof(SunData), &m_SunData, 0, 0);
 	}
 
-	void Sun::Destroy() {
+	Sun::~Sun() {
 		m_UniformBuffer.Destroy();
 	}
 
 	void Sun::SetZenith(float z) {
-		m_SunData.m_Zenith = z;
+		m_SunData.m_Zenith = z; 
 		m_SunData.m_SunDir = VecFromAngles(z, m_SunData.m_Azimuth);
 		m_UniformBuffer.MapMemory(sizeof(SunData), &m_SunData, 0, 0);
 	}
 
 	void Sun::SetAzimuth(float a) {
-		m_SunData.m_Azimuth = a;
+		m_SunData.m_Azimuth = a; 
 		m_SunData.m_SunDir = VecFromAngles(m_SunData.m_Zenith, a);
 		m_UniformBuffer.MapMemory(sizeof(SunData), &m_SunData, 0, 0);
 	}
 
 	void Sun::SetColor(glm::vec3 c) {
-		m_SunData.m_Color = c;
+		m_SunData.m_Color = c; 
 		m_UniformBuffer.MapMemory(sizeof(glm::vec3), &c, offsetof(SunData, m_Color), 0);
+	}
+
+	float Sun::GetZenith() const {
+		return m_SunData.m_Zenith;
 	}
 
 	VkDescriptorSetLayout Sun::GetDescriptorSetLayout() const {
@@ -146,7 +151,10 @@ namespace en {
 		ImGui::Begin("Sun");
 		// use | so both are evaluated.
 		if (ImGui::DragFloat("zenith", &m_SunData.m_Zenith, 0.001) |
-			ImGui::DragFloat("azimuth", &m_SunData.m_Azimuth, 0.001)) {
+			ImGui::DragFloat("azimuth", &m_SunData.m_Azimuth, 0.001) |
+			ImGui::DragFloat("Color_r", &m_SunData.m_Color.r, 0.001) |
+			ImGui::DragFloat("Color_g", &m_SunData.m_Color.g, 0.001) |
+			ImGui::DragFloat("Color_b", &m_SunData.m_Color.b, 0.001) ) {
 
 			m_SunData.m_SunDir = VecFromAngles(m_SunData.m_Zenith, m_SunData.m_Azimuth);
 			m_UniformBuffer.MapMemory(sizeof(SunData), &m_SunData, 0, 0);

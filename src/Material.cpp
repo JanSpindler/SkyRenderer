@@ -40,11 +40,11 @@ namespace en
 		// Create Descriptor Pool
 		VkDescriptorPoolSize uniformBufferPoolSize;
 		uniformBufferPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		uniformBufferPoolSize.descriptorCount = 1;
+		uniformBufferPoolSize.descriptorCount = MAX_COUNT/2;
 
 		VkDescriptorPoolSize diffuseTexPoolSize;
 		diffuseTexPoolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		diffuseTexPoolSize.descriptorCount = 1;
+		diffuseTexPoolSize.descriptorCount = MAX_COUNT/2;
 
 		std::vector<VkDescriptorPoolSize> poolSizes = { uniformBufferPoolSize, diffuseTexPoolSize };
 

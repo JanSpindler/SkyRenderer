@@ -1,0 +1,40 @@
+#version 450
+#extension GL_EXT_debug_printf : enable
+
+#include "transmittance.h"
+#include "env_set.h"
+
+// will not be used in this shader.
+#define SCATTERING_STEP_LENGTH TRANSMITTANCE_STEP_LENGTH
+#include "functions.glsl"
+
+layout (set = T_SETS_IMAGE, binding = 0, rgba16f) uniform writeonly image2D transmittance_image;
+ENV_SET(T_SETS_ENV, env)
+
+void main() {
+	float tex_height = float(gl_WorkGroupID.x)/(TRANSMITTANCE_RESOLUTION_HEIGHT-1);
+	float tex_view = float(gl_WorkGroupID.y)/(TRANSMITTANCE_RESOLUTION_VIEW-1);
+
+	// clamp to prevent height of 0, it causes problems with intersecting atmosphere from view-point.
+	float actual_height = clamp(tex_to_height(tex_height, env.atmosphere_height), 0.3, env.atmosphere_height-1);
+	float c_view = clamp(tex_to_view(tex_view, actual_height, env.r_planet), -1, 1);
+
+	vec2 from = vec2(0, actual_height+env.r_planet);
+	vec2 to = atmosphere_earth_intersect(from, unit_vec_from_cos(c_view), env.r_planet, env.r_atmosphere);
+
+	vec3 transmittance = transmittance(
+		from,
+		to,
+		env.rayleigh_scale_height,
+		env.mie_scale_height,
+		env.rayleigh_scattering_coefficient,
+		env.mie_scattering_coefficient/0.9,
+		env.ozone_extinction_coefficient,
+		env.r_planet);
+
+	ivec2 tex_coord = ivec2(gl_WorkGroupID.x, gl_WorkGroupID.y);
+	// using layout rgba16f, so we have to store a vec4.
+	// Seems like rgb16f isn't available, just swallow the unnecessarily big
+	// memory for now.
+	imageStore(transmittance_image, tex_coord, vec4(transmittance, 0));
+}

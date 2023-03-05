@@ -5,4 +5,4 @@
 #include <iostream>
 #include <engine/util/Log.hpp>
 
-#define ASSERT_VULKAN(result) if (result != VK_SUCCESS) { en::Log::Error("ASSERT_VULKAN triggered", true); }
+#define ASSERT_VULKAN(result) if (result != VK_SUCCESS) { en::Log::LocationError("ASSERT_VULKAN triggered", result, __FILE__, __LINE__, true); }

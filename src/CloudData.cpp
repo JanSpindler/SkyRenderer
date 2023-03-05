@@ -4,7 +4,6 @@
 #include <imgui.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <engine/util/ReadFile.hpp>
-
 namespace en
 {
 	bool CloudUniformData::operator==(const CloudUniformData& other)
@@ -23,10 +22,7 @@ namespace en
 			this->ambientGradientMaxVal == other.ambientGradientMaxVal &&
 			this->jitterStrength == other.jitterStrength &&
 			this->sigmaS == other.sigmaS &&
-			this->sigmaE == other.sigmaE &&
-			this->temporalUpsampling == other.temporalUpsampling &&
-			this->ltee == other.ltee &&
-			this->htee == other.htee;
+			this->sigmaE == other.sigmaE;
 	}
 
 	bool CloudUniformData::operator!=(const CloudUniformData& other)
@@ -120,7 +116,7 @@ namespace en
 		vkDestroyDescriptorPool(device, m_DescriptorPool, nullptr);
 		vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayout, nullptr);
 	}
-	
+
 	VkDescriptorSetLayout CloudData::GetDescriptorSetLayout()
 	{
 		return m_DescriptorSetLayout;
@@ -128,54 +124,51 @@ namespace en
 
 	CloudData::CloudData() :
 		m_CloudShapeTexture(
-			{	NoiseGenerator::Perlin3D(glm::uvec3(128, 32, 128), glm::vec3(0.0f), 1.0f / 48.0f, 0.0f, 1.0f),
+			{ NoiseGenerator::Perlin3D(glm::uvec3(128, 32, 128), glm::vec3(0.0f), 1.0f / 48.0f, 0.0f, 1.0f),
 				NoiseGenerator::Worley3D(glm::uvec3(128, 32, 128), 16, true, 0.0f, 1.0f),
 				NoiseGenerator::Worley3D(glm::uvec3(128, 32, 128), 8, true, 0.0f, 1.0f),
 				NoiseGenerator::Worley3D(glm::uvec3(128, 32, 128), 4, true, 0.0f, 1.0f) },
 			VK_FILTER_LINEAR,
 			VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT),
 		m_CloudDetailTexture(
-			{	NoiseGenerator::Worley3D(glm::uvec3(32), 8, true, 0.0f, 1.0f),
+			{ NoiseGenerator::Worley3D(glm::uvec3(32), 8, true, 0.0f, 1.0f),
 				NoiseGenerator::Worley3D(glm::uvec3(32), 4, true, 0.0f, 1.0f),
 				NoiseGenerator::Worley3D(glm::uvec3(32), 2, true, 0.0f, 1.0f),
 				NoiseGenerator::NoNoise3D(glm::uvec3(32), 1.0f) },
 			VK_FILTER_LINEAR,
 			VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT),
 		m_WeatherTexture(
-			{	NoiseGenerator::Worley2D(glm::uvec2(256), 16, -0.1f, 1.0f),
+			{ NoiseGenerator::Worley2D(glm::uvec2(256), 16, 0.0f, 1.0f),
 				NoiseGenerator::Perlin2D(glm::uvec2(256), glm::vec2(20.0f, 10.0f), 1.0f / 16.0f, 0.4f, 0.7f),
 				NoiseGenerator::Perlin2D(glm::uvec2(256), glm::vec2(10.0f, 30.0f), 1.0f / 16.0f, 0.0f, 0.3f),
 				NoiseGenerator::NoNoise2D(glm::uvec2(256), 1.0f) },
 			VK_FILTER_LINEAR,
 			VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT),
 		m_UniformBuffer(new vk::Buffer(
-			sizeof(CloudUniformData), 
+			sizeof(CloudUniformData),
 			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			{})),
-		m_SampleCounts({ 48, 4 }),
+		m_SampleCounts({ 40, 4 }),
 		m_SampleCountsChanged(false)
 	{
 		VkDevice device = VulkanAPI::GetDevice();
 
 		// Uniform data
-		m_UniformData.skySize = glm::vec3(2048.0f, 128.0f, 2048.0f);
-		m_UniformData.skyPos = glm::vec3(0.0f, 0.0f, 0.0f);
-		m_UniformData.shapeScale = 0.5f;
-		m_UniformData.detailThreshold = 0.15f;
-		m_UniformData.detailFactor = 0.2f;
-		m_UniformData.detailScale = 3.0f;
-		m_UniformData.heightGradientMinVal = 0.6f;
-		m_UniformData.heightGradientMaxVal = 1.0f;
-		m_UniformData.g = 0.75f;
+		m_UniformData.skySize = glm::vec3(40000.0f, 5000.0f, 40000.0f);
+		m_UniformData.skyPos = glm::vec3(0.0f, 5000.0f, 0.0f);
+		m_UniformData.shapeScale = 4.25f;
+		m_UniformData.detailThreshold = 1.0f;
+		m_UniformData.detailFactor = 0.6f;
+		m_UniformData.detailScale = 9.5f;
+		m_UniformData.heightGradientMinVal = 0.05f;
+		m_UniformData.heightGradientMaxVal = 0.15f;
+		m_UniformData.g = 0.35f;
 		m_UniformData.ambientGradientMinVal = 0.6f;
 		m_UniformData.ambientGradientMaxVal = 1.0f;
 		m_UniformData.jitterStrength = 1.0f;
-		m_UniformData.sigmaS = 0.35f;
+		m_UniformData.sigmaS = 0.5f;
 		m_UniformData.sigmaE = 0.35f;
-		m_UniformData.temporalUpsampling = 0.05f;
-		m_UniformData.ltee = 1;
-		m_UniformData.htee = 0;
 
 		m_UniformBuffer->MapMemory(sizeof(CloudUniformData), &m_UniformData, 0, 0);
 
@@ -282,12 +275,12 @@ namespace en
 
 		// Imgui
 		ImGui::Begin("Cloud Data");
-		ImGui::SliderFloat3("Sky Size", glm::value_ptr(m_UniformData.skySize), 0.0f, 1024.0f);
-		ImGui::SliderFloat3("Sky Pos", glm::value_ptr(m_UniformData.skyPos), -512.0f, 512.0f);
-		ImGui::SliderFloat("Shape Scale", &m_UniformData.shapeScale, 0.0f, 8.0f);
+		ImGui::SliderFloat3("Sky Size", glm::value_ptr(m_UniformData.skySize), 0.0f, 40000.0f);
+		ImGui::SliderFloat3("Sky Pos", glm::value_ptr(m_UniformData.skyPos), -10000.0f, 10000.0f);
+		ImGui::SliderFloat("Shape Scale", &m_UniformData.shapeScale, 0.0f, 16.0f);
 		ImGui::SliderFloat("Detail Threshold", &m_UniformData.detailThreshold, 0.0f, 1.0f);
 		ImGui::SliderFloat("Detail Factor", &m_UniformData.detailFactor, 0.0f, 1.0f);
-		ImGui::SliderFloat("Detail Scale", &m_UniformData.detailScale, 0.0f, 8.0f);
+		ImGui::SliderFloat("Detail Scale", &m_UniformData.detailScale, 0.0f, 16.0f);
 		ImGui::SliderFloat("Height Gradient Min Val", &m_UniformData.heightGradientMinVal, 0.0f, 1.0f);
 		ImGui::SliderFloat("Height Gradient Max Val", &m_UniformData.heightGradientMaxVal, 0.0f, 1.0f);
 		ImGui::SliderFloat("G", &m_UniformData.g, 0.0f, 1.0f);
@@ -298,9 +291,6 @@ namespace en
 		ImGui::SliderFloat("Sigma E", &m_UniformData.sigmaE, 0.0f, 4.0f);
 		ImGui::SliderInt("Primary Sample Count", &m_SampleCounts.primary, 1, 128);
 		ImGui::SliderInt("Secondary Sample Count", &m_SampleCounts.secondary, 0, 8);
-		ImGui::SliderFloat("Temporal Upsampling", &m_UniformData.temporalUpsampling, 0.0f, 1.0f);
-		ImGui::Checkbox("LTEE", reinterpret_cast<bool*>(&m_UniformData.ltee));
-		ImGui::Checkbox("HTEE", reinterpret_cast<bool*>(&m_UniformData.htee));
 		ImGui::End();
 
 		// Check if uniform data changed

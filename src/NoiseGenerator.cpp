@@ -6,6 +6,7 @@
 #include <engine/graphics/VulkanAPI.hpp>
 #include <engine/graphics/vulkan/Buffer.hpp>
 #include <engine/graphics/vulkan/CommandPool.hpp>
+#include <string.h>
 
 namespace en
 {

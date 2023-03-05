@@ -1,0 +1,132 @@
+\RequirePackage{fix-cm}                                     % Fix font with siunitx
+\documentclass[english, twocolumn]{article}                 % Document type
+%\usepackage{emptypage}                                      % Empty pages
+\RequirePackage[l2tabu, orthodox]{nag}                      % Detect deprecated packages, commands, etc.
+\usepackage[all,error]{onlyamsmath}                         % Error on deprecated math commands like $$ $$.
+\AtBeginDocument{\catcode`$=3 }                             % Workaround for tikz
+\usepackage{fixmath}                                        % Fix non ISO behaviour with capital greek letters
+%\usepackage{refcheck}                                       % Display warning on unused references
+%\ignoreunlbld                                               % Ignore equations in refcheck
+\usepackage{todonotes}                                      % TODO
+
+\usepackage{lipsum}                                         % Generate random text (ONLY FOR TEST PURPOSES)
+
+
+% --- Mathematical packages ---
+\usepackage{amsmath}                                        % Math
+\usepackage{amsthm}                                         % Theorems and proofs
+\usepackage{amssymb}                                        % Math symbols
+\usepackage{bm}												% Bold math
+\usepackage[per-mode=fraction,
+            exponent-product=\cdot,
+            separate-uncertainty=true,
+            binary-units=true
+           ]{siunitx}                                       % Physical units
+%\usepackage{mathtools}                                      % Math tools
+
+
+% --- Typographical packages ---
+% - Bases -
+\usepackage[utf8]{inputenc}                                 % UTF-8 Encoding
+\usepackage[T1]{fontenc}                                    % Font encoding
+\usepackage{babel}                                          % Translation
+\usepackage[babel]{csquotes}                                % Quotes
+\usepackage{comment}                                        % Comments
+% - Font -
+\usepackage{newtxtext,newtxmath}                            % Times font
+\usepackage[toctitles,compact,explicit]{titlesec}           % Custom chapter headings
+\usepackage{microtype}                                      % Typographical improvements
+\usepackage{ellipsis}                                       % Whitespace correction
+% - Shape -
+\usepackage[hyphens]{url}                                   % Hyphens in URLs
+\usepackage{varioref}
+\usepackage[hidelinks]{hyperref}                                       % Clickable references
+\usepackage[noabbrev,capitalise]{cleveref}
+\usepackage[backend=biber,					% Backend
+            bibencoding=utf8,				% File encoding (BibTex = ASCII, Biber = UTF8)
+            bibstyle=authoryear,		    % Reference style
+            citestyle=authoryear,           % Citation style
+            bibwarn=true,                   % Enable warnings
+            style=alphabetic,
+            natbib=true,					% Natbib compatibility
+            maxcitenames=2,					% Cite : > 2 name = et al.
+            maxbibnames=99,					% Bib  : show all names
+            sortcites=true,					% Sorting
+            block=space,					% Space between citations
+            giveninits=true,				% Compress first names
+            uniquename=init,				% Compatible with 'giveninits=true'
+            isbn=false,                     % Disable ISBN
+            doi=false                       % Disable DOI
+           ]{biblatex}
+\usepackage{fancyhdr}                                       % Custom head- and foot-lines
+\usepackage{setspace}                                       % Spacing between lines
+\usepackage[titles]{tocloft}                                % Spacing in table of contents
+%\usepackage{abstract}                                       % Abstract
+\usepackage[margin=2cm]{geometry}                                       % Geometry of a page
+
+% --- Graphical packages ---
+\usepackage{float}                                          % float environment settings
+\usepackage{graphicx}                                       % Figures
+\usepackage{caption}                                        % Figures and captions
+\usepackage{subcaption}                                     % Figures and captions (side-by-side)
+\usepackage{booktabs}                                       % Improved tables
+\usepackage{multirow}                                       % Multirow
+
+
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{listing}
+\usepackage{graphics}
+
+\usepackage{pbox}
+% Disable underfull box warnings when breaking URLs
+\usepackage{etoolbox}
+\apptocmd{\sloppy}{\hbadness 10000\relax}{}{}
+
+
+
+\addbibresource{refs.bib}
+
+\setlength\columnsep{30pt}
+\setlength\voffset{1cm}
+\addtolength{\textheight}{-2cm}
+
+\input{config}
+\input{macros}
+
+% Generate author and title
+\makeatletter
+
+\begin{document}
+
+{
+  \twocolumn[
+    \begin{center}
+      \LARGE \reportType{} Report: \\ \@title
+    \end{center}
+    \begin{center}
+      \large\@author \\
+      \large Mat. Nr.: \matNr{}
+    \end{center}
+    \begin{center}
+      \large \@date
+    \end{center}
+    \vspace{0.3cm}
+    \input{teaser}
+    \vspace{0.8cm}
+  ]
+}
+
+\input{abstract}
+
+\input{content-intro}
+\input{content-cloud}
+\input{content-sky}
+
+\printbibliography
+
+\appendix
+
+\include{appendix}
+
+\end{document}

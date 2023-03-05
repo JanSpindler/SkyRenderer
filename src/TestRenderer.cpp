@@ -104,7 +104,7 @@ namespace en
 
 		VkAttachmentReference colorAttachmentReference;
 		colorAttachmentReference.attachment = 0;
-		colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		colorAttachmentReference.layout = VK_IMAGE_LAYOUT_GENERAL;
 
 		VkSubpassDescription subpass;
 		subpass.flags = 0;

@@ -32,9 +32,6 @@ namespace en
 		float jitterStrength;
 		float sigmaS;
 		float sigmaE;
-		float temporalUpsampling;
-		uint32_t ltee;
-		uint32_t htee;
 
 		bool operator==(const CloudUniformData& other);
 		bool operator!=(const CloudUniformData& other);

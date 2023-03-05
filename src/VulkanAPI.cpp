@@ -1,15 +1,17 @@
 #include <engine/graphics/VulkanAPI.hpp>
 #include <vector>
+#include <map>
 #include <engine/util/Log.hpp>
 #include <engine/graphics/Window.hpp>
 #include <engine/graphics/Camera.hpp>
 #include <engine/graphics/vulkan/Texture2D.hpp>
 #include <engine/objects/Material.hpp>
 #include <engine/objects/Model.hpp>
+#include <vulkan/vulkan_core.h>
 #include <engine/objects/CloudData.hpp>
 #include <engine/graphics/vulkan/ComputePipeline.hpp>
 #include <engine/util/NoiseGenerator.hpp>
-#include <engine/graphics/Sun.hpp>
+#include <engine/objects/Wind.hpp>
 
 namespace en
 {
@@ -22,10 +24,12 @@ namespace en
 
 	PhysicalDeviceInfo VulkanAPI::m_PhysicalDeviceInfo;
 	uint32_t VulkanAPI::m_GraphicsQFI;
+	uint32_t VulkanAPI::m_ComputeQFI;
 	uint32_t VulkanAPI::m_PresentQFI;
 
 	VkDevice VulkanAPI::m_Device;
 	VkQueue VulkanAPI::m_GraphicsQueue;
+	VkQueue VulkanAPI::m_ComputeQueue;
 	VkQueue VulkanAPI::m_PresentQueue;
 
 	void VulkanAPI::Init(const std::string& appName)
@@ -44,14 +48,14 @@ namespace en
 		CloudData::Init();
 		vk::ComputePipeline::Init();
 		NoiseGenerator::Init();
-		Sun::Init();
+		Wind::Init();
 	}
 
 	void VulkanAPI::Shutdown()
 	{
 		Log::Info("Shutting down VulkanAPI");
 
-		Sun::Shutdown();
+		Wind::Shutdown();
 		NoiseGenerator::Shutdown();
 		vk::ComputePipeline::Shutdown();
 		CloudData::Shutdown();
@@ -112,7 +116,7 @@ namespace en
 
 	uint32_t VulkanAPI::GetSwapchainImageCount()
 	{
-		return std::min(m_SurfaceCapabilities.minImageCount + 1, m_SurfaceCapabilities.maxImageCount);
+		return std::min(m_SurfaceCapabilities.minImageCount + 1, m_SurfaceCapabilities.maxImageCount == 0 ? UINT32_MAX : m_SurfaceCapabilities.maxImageCount);
 	}
 
 	VkSurfaceFormatKHR VulkanAPI::GetSurfaceFormat()
@@ -135,6 +139,11 @@ namespace en
 		return m_GraphicsQFI;
 	}
 
+	uint32_t VulkanAPI::GetComputeQFI()
+	{
+		return m_GraphicsQFI;
+	}
+
 	uint32_t VulkanAPI::GetPresentQFI()
 	{
 		return m_PresentQFI;
@@ -148,6 +157,11 @@ namespace en
 	VkQueue VulkanAPI::GetGraphicsQueue()
 	{
 		return m_GraphicsQueue;
+	}
+
+	VkQueue VulkanAPI::GetComputeQueue()
+	{
+		return m_ComputeQueue;
 	}
 
 	VkQueue VulkanAPI::GetPresentQueue()
@@ -169,7 +183,7 @@ namespace en
 
 		// Select wanted layers
 		std::vector<const char*> layers = {
-			"VK_LAYER_KHRONOS_validation"
+			// "VK_LAYER_KHRONOS_validation"
 		};
 
 		// List supported extensions
@@ -275,24 +289,16 @@ namespace en
 
 			// Graphics QFI
 			uint32_t graphicsQFI = UINT32_MAX;
-			for (size_t i = 0; i < queueFamilies.size(); i++)
-			{
-				if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-				{
-					graphicsQFI = i;
-					break;
-				}
-			}
-
-			// Present Support / QFI
-			uint32_t presentQFI = UINT32_MAX;
 			VkBool32 presentSupport = VK_FALSE;
 			for (size_t i = 0; i < queueFamilies.size(); i++)
 			{
+				// find queue with compute, graphics and present capabilities.
 				vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, m_Surface, &presentSupport);
-				if (presentSupport == VK_TRUE)
+				if (
+					queueFamilies[i].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT) &&
+					presentSupport == VK_TRUE)
 				{
-					presentQFI = i;
+					graphicsQFI = i;
 					break;
 				}
 			}
@@ -337,7 +343,6 @@ namespace en
 			if (isDiscreteGPU &&
 				hasGeometryShader &&
 				graphicsQFI != UINT32_MAX &&
-				presentQFI != UINT32_MAX &&
 				formatAvailable)
 			{
 				Log::Info(
@@ -346,7 +351,8 @@ namespace en
 
 				m_PhysicalDeviceInfo = physicalDeviceInfo;
 				m_GraphicsQFI = graphicsQFI;
-				m_PresentQFI = presentQFI;
+				m_PresentQFI = graphicsQFI;
+				m_ComputeQFI = graphicsQFI;
 
 				m_SurfaceCapabilities = surfaceCapabilities;
 				m_SurfaceFormat = bestFormat;
@@ -392,71 +398,38 @@ namespace en
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 			VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME };
 
-		// QueueFamily create infos
-		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-		if (m_GraphicsQFI == m_PresentQFI)
-		{
-			float priorities[] = { 1.0f, 1.0f };
+		float priority = 1.0f;
+		VkDeviceQueueCreateInfo queueCreateInfo;
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.pNext = nullptr;
+		queueCreateInfo.flags = 0;
+		queueCreateInfo.queueFamilyIndex = m_GraphicsQFI;
+		queueCreateInfo.queueCount = 1;
+		queueCreateInfo.pQueuePriorities = &priority;
 
-			VkDeviceQueueCreateInfo queueCreateInfo;
-			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-			queueCreateInfo.pNext = nullptr;
-			queueCreateInfo.flags = 0;
-			queueCreateInfo.queueFamilyIndex = m_GraphicsQFI;
-			queueCreateInfo.queueCount = 2;
-			queueCreateInfo.pQueuePriorities = priorities;
-
-			queueCreateInfos = { queueCreateInfo };
-		}
-		else
-		{
-			float priorities[] = { 1.0f };
-
-			VkDeviceQueueCreateInfo graphicsQueueCreateInfo;
-			graphicsQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-			graphicsQueueCreateInfo.pNext = nullptr;
-			graphicsQueueCreateInfo.flags = 0;
-			graphicsQueueCreateInfo.queueFamilyIndex = m_GraphicsQFI;
-			graphicsQueueCreateInfo.queueCount = 1;
-			graphicsQueueCreateInfo.pQueuePriorities = priorities;
-
-			VkDeviceQueueCreateInfo presentQueueCreateInfo;
-			presentQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-			presentQueueCreateInfo.pNext = nullptr;
-			presentQueueCreateInfo.flags = 0;
-			presentQueueCreateInfo.queueFamilyIndex = m_PresentQFI;
-			presentQueueCreateInfo.queueCount = 1;
-			presentQueueCreateInfo.pQueuePriorities = priorities;
-		
-			queueCreateInfos = { graphicsQueueCreateInfo, presentQueueCreateInfo };
-		}
+		// enable float64 for sky-vertex shader.
+		VkPhysicalDeviceFeatures features {};
+		features.shaderFloat64 = VK_TRUE;
 
 		// Create
 		VkDeviceCreateInfo createInfo;
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		createInfo.pNext = nullptr;
 		createInfo.flags = 0;
-		createInfo.queueCreateInfoCount = queueCreateInfos.size();
-		createInfo.pQueueCreateInfos = queueCreateInfos.data();
+		createInfo.queueCreateInfoCount = 1;
+		createInfo.pQueueCreateInfos = &queueCreateInfo;
 		createInfo.enabledLayerCount = layers.size();
 		createInfo.ppEnabledLayerNames = layers.data();
 		createInfo.enabledExtensionCount = extensions.size();
 		createInfo.ppEnabledExtensionNames = extensions.data();
-		createInfo.pEnabledFeatures = nullptr;
+		createInfo.pEnabledFeatures = &features;
 
 		VkResult result = vkCreateDevice(physicalDevice, &createInfo, nullptr, &m_Device);
 		ASSERT_VULKAN(result);
 
-		// Retreive device queues
-		if (m_GraphicsQFI == m_PresentQFI)
-		{
-			vkGetDeviceQueue(m_Device, m_GraphicsQFI, 0, &m_GraphicsQueue);
-			vkGetDeviceQueue(m_Device, m_GraphicsQFI, 1, &m_PresentQueue);
-		}
-		else
-		{
-			vkGetDeviceQueue(m_Device, m_GraphicsQFI, 0, &m_GraphicsQueue);
-			vkGetDeviceQueue(m_Device, m_PresentQFI, 0, &m_PresentQueue);
-		}
+		VkQueue queue;
+		vkGetDeviceQueue(m_Device, m_GraphicsQFI, 0, &m_GraphicsQueue);
+		m_PresentQueue = m_GraphicsQueue;
+		m_ComputeQueue = m_GraphicsQueue;
 	}
 }
