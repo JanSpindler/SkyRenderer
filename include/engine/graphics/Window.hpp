@@ -14,7 +14,6 @@ namespace en
 		static void Shutdown();
 
 		static void WaitForUsableSize();
-		static void EnableCursor(bool cursorEnabled);
 
 		static GLFWwindow* GetGLFWHandle();
 		static uint32_t GetWidth();

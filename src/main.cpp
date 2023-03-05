@@ -1,7 +1,6 @@
 // for cmath
 #include "engine/graphics/AerialPerspective.hpp"
 #include "engine/graphics/Atmosphere.hpp"
-#include "engine/graphics/GroundLighting.hpp"
 #include "engine/graphics/renderer/AerialPerspectiveRenderer.hpp"
 #include "engine/graphics/renderer/PostprocessingSubpass.hpp"
 #define _USE_MATH_DEFINES
@@ -24,29 +23,17 @@
 #include <engine/graphics/Precomputer.hpp>
 #include <engine/graphics/renderer/SubpassRenderer.hpp>
 #include <engine/graphics/Subpass.hpp>
-#include <engine/graphics/renderer/CloudRenderer.hpp>
-#include <engine/util/Input.hpp>
-#include <engine/util/Time.hpp>
-#include <engine/objects/CloudData.hpp>
-#include <engine/objects/Terrain.hpp>
-#include <engine/objects/Wind.hpp>
 
 en::EnvConditions::Environment earthConditions {
-	// data from https://www.iup.uni-bremen.de/gruppen/molspec/downloads/serdyuchenkogorshelev5digits.dat.
-	// 650, 510, 475nm at 243K (-30C, eyeballed average temperature for height of most ozone).
-	// *10^-4 for cm^2 -> m^2.
-	.m_OzoneExtinctionCoefficient = glm::vec3(2.43181E-25, 1.151113e-25, 4.47939e-26),
 	.m_PlanetRadius = 6371000,
 	.m_AtmosphereHeight = 80000,
 	.m_RefractiveIndexAir = 1.0003,
 	.m_AirDensityAtSeaLevel = static_cast<float>(2.545*pow(10, 25)),
 	.m_MieScatteringCoefficient = 0.000002,
-	.m_AsymmetryFactor = 0.73,
+	.m_AsymmetryFactor = -0.9,
 	.m_RayleighScaleHeight = 8000,
 	.m_MieScaleHeight = 1200
 };
-
-en::CloudRenderer* cloudRenderer;
 
 std::vector<VkSemaphore> precomp_aerial_semaphores;
 std::vector<VkSemaphore> aerial_render_semaphores;
@@ -68,30 +55,6 @@ void CreateRenderSemaphores(size_t num) {
 		vkCreateSemaphore(en::VulkanAPI::GetDevice(), &sem_inf, nullptr, &aerial_render_semaphores[i]);
 		vkCreateSemaphore(en::VulkanAPI::GetDevice(), &sem_inf, nullptr, &render_submit_semaphores[i]);
 	}
-	// if (cloudRenderer != nullptr && en::ImGuiRenderer::IsInitialized())
-	// {
-	// 	VkImageCopy imageCopy;
-	// 	imageCopy.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	// 	imageCopy.srcSubresource.mipLevel = 0;
-	// 	imageCopy.srcSubresource.baseArrayLayer = 0;
-	// 	imageCopy.srcSubresource.layerCount = 1;
-	// 	imageCopy.srcOffset = { 0, 0, 0 };
-	// 	imageCopy.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	// 	imageCopy.dstSubresource.mipLevel = 0;
-	// 	imageCopy.dstSubresource.baseArrayLayer = 0;
-	// 	imageCopy.dstSubresource.layerCount = 1;
-	// 	imageCopy.dstOffset = { 0, 0, 0 };
-	// 	imageCopy.extent = { width, height, 1 };
-
-	// 	vkCmdCopyImage(
-	// 		commandBuffer,
-	// 		en::ImGuiRenderer::GetImage(),
-	// 		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-	// 		image,
-	// 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-	// 		1,
-	// 		&imageCopy);
-	// }
 }
 
 void DestroyRenderSemaphores() {
@@ -102,16 +65,6 @@ void DestroyRenderSemaphores() {
 	}
 }
 
-void SwapchainResizeCallback()
-{
-	en::Window::WaitForUsableSize();
-	vkDeviceWaitIdle(en::VulkanAPI::GetDevice());
-
-	uint32_t width = en::Window::GetWidth();
-	uint32_t height = en::Window::GetHeight();
-	cloudRenderer->Resize(width, height);
-}
-
 int main(int argc, char** argv)
 {
     en::Log::Info("Starting SkyRenderer");
@@ -119,43 +72,34 @@ int main(int argc, char** argv)
 	// Engine
     en::Window::Init(800, 600, "SkyRenderer");
     en::VulkanAPI::Init("SkyRenderer");
-	en::Input::Init(en::Window::GetGLFWHandle());
 
     uint32_t width = en::Window::GetWidth();
     uint32_t height = en::Window::GetHeight();
 
 	// Graphics
 	en::vk::Swapchain swapchain(width, height);
+
 	en::Camera camera(
 		glm::vec3(0.0f, 0.5f, -5.0f),
 		M_PI_2,
 		glm::vec3(0.0f, 1.0f, 0.0f),
 		width, height,
 		glm::radians(60.0f),
-		1.0f,
-		100000.0f);
+		0.1f,
+		1000000.0f);
 
 	en::Sun::Init();
 	en::Sun sun(M_PI_2, 0, glm::vec3(10));
 
-	en::Wind wind(M_PI / 8.0f, 0.0f);
-
 	// TODO: clean up all of this, precomp should own atmosphere and env.
 	en::EnvConditions earthEnv(earthConditions);
 	en::Atmosphere atmosphere(earthEnv.GetDescriptorSetLayout());
-	//en::DirLight dirLight(glm::vec3(0.4f, -0.2f, -0.4f));
 
-	//modelRenderer = new en::SimpleModelRenderer(width, height, &camera);
 	en::Precomputer precomp(atmosphere, earthEnv, 1, 1, 1);
-
-	en::CloudData cloudData;
-	auto cloudRenderer = std::make_shared<en::CloudRenderer>(width, height, &camera, &sun, &wind, &cloudData, &atmosphere, &precomp);
-
-	en::GroundLighting gl(precomp, atmosphere, sun);
 
 	en::AerialPerspective aerial(camera, precomp, atmosphere, sun);
 
-	auto modelRenderer = std::make_shared<en::SimpleModelRenderer>(width, height, &camera, &sun, gl, swapchain.GetImageCount());
+	auto modelRenderer = std::make_shared<en::SimpleModelRenderer>(width, height, &camera, swapchain.GetImageCount());
 	auto postProcess = std::make_shared<en::PostprocessingSubpass>(width, height);
 
 	auto skyRenderer = std::make_shared<en::SkyRenderer>(
@@ -185,22 +129,10 @@ int main(int argc, char** argv)
 	en::SubpassRenderer spr = en::SubpassRenderer(std::vector<std::shared_ptr<en::Subpass>>({
 		modelRenderer,
 		skyRenderer,
-		cloudRenderer,
 		aerialPerspectiveRenderer,
-		postProcess,
-		imguiRenderer
+		imguiRenderer,
+		postProcess
 	}), std::vector<VkSubpassDependency>({
-		{
-			// AerialPerspectiveRenderer (subpass 3) needs to wait for aerialPerspective-
-			// data (calculated in compute shader, consumed in fragment shader).
-			.srcSubpass = VK_SUBPASS_EXTERNAL,
-			.dstSubpass = 3,
-			.srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-			.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-			.dependencyFlags = 0
-		},
 		{
 			// from image acquire to model.
 			.srcSubpass = VK_SUBPASS_EXTERNAL,
@@ -216,59 +148,43 @@ int main(int argc, char** argv)
 			// simply sync color-output for now.
 			.srcSubpass = 0,
 			.dstSubpass = 1,
-			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-			.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 			.dependencyFlags = 0
 		},
 		{
 			// simply sync color-output for now.
 			.srcSubpass = 1,
 			.dstSubpass = 2,
-			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-			.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 			.dependencyFlags = 0
 		},
 		{
 			// simply sync color-output for now.
 			.srcSubpass = 2,
 			.dstSubpass = 3,
-			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-			.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_MEMORY_READ_BIT,
-			.dependencyFlags = 0
-		},
-		{
-			.srcSubpass = 3,
-			.dstSubpass = 4,
+			// don't blend unitl the color attachment was written.
 			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 			.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
 			.dependencyFlags = 0
 		},
 		{
-			.srcSubpass = 4,
-			.dstSubpass = 5,
+			// simply sync color-output for now.
+			.srcSubpass = 3,
+			.dstSubpass = 4,
 			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 			.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 			.dependencyFlags = 0
-		},
+		}
 		}),
 	swapchain);
 
@@ -280,36 +196,23 @@ int main(int argc, char** argv)
 			&imguiRenderer,
 			&aerialPerspectiveRenderer,
 			&spr,
-			&postProcess,
-			&cloudRenderer
+			&postProcess
 		]
 		(uint32_t width, uint32_t height) {
 		vkDeviceWaitIdle(en::VulkanAPI::GetDevice());
 
 		camera.SetAspectRatio(width, height);
 		camera.UpdateUBO();
-
 		skyRenderer->ResizeFrame(width, height);
 		aerialPerspectiveRenderer->ResizeFrame(width, height);
 		imguiRenderer->Resize(width, height);
 		modelRenderer->ResizeFrame(width, height);
 		postProcess->Resize(width, height);
-		cloudRenderer->Resize(width, height);
-
 		spr.Resize(width, height);
-
 		modelRenderer->RecordCommandBuffers();
 	});
 	
 	// Model
-	en::Terrain terrain(400, 20.0f, 0.0625f, 128.0f, 3.5f, 0.0f, glm::vec2(0.0f));
-	en::ModelInstance terrainInstance(reinterpret_cast<en::Model*>(&terrain), glm::mat4(1.0f));
-	modelRenderer->AddModelInstance(&terrainInstance);
-
-	en::Terrain bgTerrain(400, 128.0f, 0.0625f, 1024.0f, 2.0f, 32.0f, glm::vec2(20.0f));
-	en::ModelInstance bgTerrainInstance(reinterpret_cast<en::Model*>(&bgTerrain), glm::translate(glm::vec3(0.0f, -128.0f, 0.0f)));
-	modelRenderer->AddModelInstance(&bgTerrainInstance);
-
 	en::Model dragonModel("dragon.obj", false);
 	en::ModelInstance dragonInstance(&dragonModel, glm::mat4(1.0f));
 	modelRenderer->AddModelInstance(&dragonInstance);
@@ -351,8 +254,6 @@ int main(int argc, char** argv)
 
 		imguiRenderer->StartFrame();
 
-		cloudData.RenderImGui();
-		//dirLight.RenderImGui();
 		camera.RenderImgui();
 		earthEnv.RenderImgui();
 		sun.RenderImgui();
@@ -362,16 +263,7 @@ int main(int argc, char** argv)
 
 		imguiRenderer->EndFrame(graphicsQueue, imageIndx);
 
-		en::Input::Update();
-		en::Time::Update();
-		float deltaTime = static_cast<float>(en::Time::GetDeltaTime());
-		en::Input::HandleUserCamInput(&camera, deltaTime);
-		wind.Update(deltaTime);
-		// sun.SetZenith(fmod(sun.GetZenith() + deltaTime * -0.1f, 2 * M_PI)); // Changing daytime
-		camera.UpdateUBO();
-
 		camera.SetAspectRatio(width, height);
-		// TODO: camera.UpdateUniformBuffer();
 
 		dragonInstance.SetModelMat(
 			glm::translate(glm::vec3(0.0f, -1.0f, dragon_dist)) *
@@ -383,24 +275,19 @@ int main(int argc, char** argv)
 		// 	glm::scale(glm::vec3(1)));
 
 		// don't wait for any semphores.
-		precomp.Frame();
-		gl.Compute();
+		VkSemaphore *frameTaskSignalSem = precomp.Frame(nullptr, 0, &precomp_aerial_semaphores[imageIndx]);
 
-		// no need to wait for precomputer, it either
-		// * renders into an completely offscreen image, which will only be accessed in later frames.
-		// * increases the ratio, eg. uploads data to the GPU.
-		aerial.Compute(nullptr, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, nullptr);
+		aerial.Compute(frameTaskSignalSem, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, &aerial_render_semaphores[imageIndx]);
 
 		// wait with fragment shader-evaluation, we'll need new aerial-precomputation.
 		// TODO: wait in specific subpass only??
-		spr.Frame(graphicsQueue, imageIndx, nullptr, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, &render_submit_semaphores[imageIndx]);
+		spr.Frame(graphicsQueue, imageIndx, &aerial_render_semaphores[imageIndx], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, &render_submit_semaphores[imageIndx]);
 
 		swapchain.Submit(imageIndx, &render_submit_semaphores[imageIndx]);
 		// cannot handle multiple concurrent frames yet.
 		vkDeviceWaitIdle(device);
 	}
-	result = vkDeviceWaitIdle(device);
-	ASSERT_VULKAN(result);
+	vkDeviceWaitIdle(device);
 
 	DestroyRenderSemaphores();
 
@@ -411,27 +298,14 @@ int main(int argc, char** argv)
 	backpackInstance.Destroy();
 	backpackModel.Destroy();
 
-	bgTerrainInstance.Destroy();
-	reinterpret_cast<en::Model*>(&bgTerrain)->Destroy();
-
-	terrainInstance.Destroy();
-	reinterpret_cast<en::Model*>(&terrain)->Destroy();
-
 	// Destroy graphics resources
 	(*imguiRenderer).~ImGuiRenderer();
 
-	swapchain.Destroy(true);
+    swapchain.Destroy(true);
 
 	(*skyRenderer).Destroy();
 	(*aerialPerspectiveRenderer).Destroy();
 	modelRenderer->Destroy();
-	cloudRenderer->Destroy();
-
-	cloudData.Destroy();
-
-	//dirLight.Destroy();
-
-	wind.Destroy();
 
 	camera.Destroy();
 
@@ -440,7 +314,6 @@ int main(int argc, char** argv)
 	en::Sun::Destroy();
 	atmosphere.~Atmosphere();
 	precomp.~Precomputer();
-	gl.~GroundLighting();
 	aerial.~AerialPerspective();
 
 	(*postProcess).~PostprocessingSubpass();

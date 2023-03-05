@@ -10,7 +10,7 @@
 #include <list>
 
 typedef std::vector<VkCommandBuffer>::iterator BufIter;
-typedef std::function<void()> InstantiaterResult;
+typedef std::function<VkSemaphore *(VkSemaphore *waitSemaphore, VkPipelineStageFlags waitFlags, VkSemaphore *signalSemaphore)> InstantiaterResult;
 typedef std::function<InstantiaterResult(uint32_t offset, uint32_t count, uint32_t sumTarget, BufIter &currentBuffer, VkDescriptorSet &env)> Instantiater;
 
 typedef std::function<void()> CleanupTask;
@@ -20,26 +20,25 @@ namespace en {
 		public:
 			Precomputer(Atmosphere &atmosphere, EnvConditions &env, uint32_t stepsPerScatteringOrder, uint32_t stepsPerFrame, uint32_t blendFrames);
 			~Precomputer();
-			void Frame();
+			VkSemaphore *Frame(VkSemaphore *waitSemaphore, VkPipelineStageFlags waitFlags, VkSemaphore *signalSemaphore);
 			void RenderImgui();
-			VkDescriptorSet GetRatioDescriptorSet() const;
-			VkDescriptorSetLayout GetRatioDescriptorSetLayout() const;
+			VkDescriptorSet GetRatioDescriptorSet();
+			VkDescriptorSetLayout GetRatioDescriptorSetLayout();
 
 			EnvConditions &GetEffectiveEnv(size_t indx);
-			VkDescriptorSetLayout GetEffectiveEnvSetLayout() const;
-			VkDescriptorSet GetEffectiveEnvSet(size_t indx) const;
 
 		private:
 			class PrecomputeTask {
 				public:
 					PrecomputeTask(
-						Instantiater *instantiater,
+						Instantiater &instantiater,
 						uint32_t offset,
 						uint32_t count,
 						uint32_t sumTarget,
-						BufIter *currentBuffer,
+						BufIter &currentBuffer,
 						VkDescriptorSet env);
 
+					PrecomputeTask &operator=(PrecomputeTask &other);
 					bool Combine(PrecomputeTask &subsequent);
 					InstantiaterResult Instantiate();
 
@@ -47,8 +46,8 @@ namespace en {
 					uint32_t m_Offset;
 					uint32_t m_Count;
 					uint32_t m_SumTarget;
-					BufIter *m_CurrentBuffer;
-					Instantiater *m_Instantiater;
+					BufIter &m_CurrentBuffer;
+					Instantiater &m_Instantiater;
 					VkDescriptorSet m_EnvDescSet;
 			};
 

@@ -1,4 +1,4 @@
-//#include <alloca.h>
+#include <alloca.h>
 #include <engine/graphics/renderer/PostprocessingSubpass.hpp>
 #include <engine/graphics/VulkanAPI.hpp>
 #include <glm/glm.hpp>

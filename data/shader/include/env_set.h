@@ -3,7 +3,6 @@
 	float r_planet;                                                                   \
 	vec3 mie_scattering_coefficient;                                                  \
 	float r_atmosphere;                                                               \
-	vec3 ozone_extinction_coefficient;                                                \
 	float atmosphere_height;                                                          \
 	float asymmetry_factor;                                                           \
 	float rayleigh_scale_height;                                                      \

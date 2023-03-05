@@ -1,6 +1,5 @@
 #pragma once
 
-#include "engine/graphics/GroundLighting.hpp"
 #include "engine/graphics/vulkan/Swapchain.hpp"
 #include <engine/graphics/Common.hpp>
 #include <engine/graphics/vulkan/Shader.hpp>
@@ -8,13 +7,12 @@
 #include <engine/graphics/Subpass.hpp>
 #include <engine/objects/Model.hpp>
 #include <engine/graphics/Camera.hpp>
-#include <engine/graphics/Sun.hpp>
 
 namespace en
 {
 	class SimpleModelRenderer : public Subpass {
 	public:
-		SimpleModelRenderer(uint32_t width, uint32_t height, const Camera* camera, const Sun* sun, const GroundLighting &gl, size_t max_concurrent);
+		SimpleModelRenderer(uint32_t width, uint32_t height, const Camera* camera, size_t max_concurrent);
 
 		void Render(VkQueue queue, size_t imageIndx) const;
 		void Destroy();
@@ -39,8 +37,6 @@ namespace en
 		uint32_t m_FrameWidth;
 		uint32_t m_FrameHeight;
 		const Camera* m_Camera;
-		const Sun* m_Sun;
-		const GroundLighting &m_GroundLighting;
 
 		VkRenderPass m_RenderPass;
 		uint32_t m_Subpass;

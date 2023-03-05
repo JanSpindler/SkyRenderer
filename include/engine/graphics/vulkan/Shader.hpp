@@ -16,7 +16,6 @@ namespace en::vk
 			Fragment
 		};
 
-		Shader();
 		Shader(const std::vector<char>& code);
 		Shader(const std::string& fileName, bool compiled);
 

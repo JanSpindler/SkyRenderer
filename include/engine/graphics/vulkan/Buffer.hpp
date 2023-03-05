@@ -13,15 +13,11 @@ namespace en::vk
 
 		void Destroy();
 		void MapMemory(VkDeviceSize size, const void* data, VkDeviceSize offset, VkMemoryMapFlags mapFlags);
-		void GetData(VkDeviceSize size, void* dst, VkDeviceSize offset, VkMemoryMapFlags mapFlags);
 
 		VkBuffer GetVulkanHandle() const;
-
-		VkDeviceSize GetUsedSize() const;
 
 	private:
 		VkBuffer m_VulkanHandle;
 		VkDeviceMemory m_DeviceMemory;
-		VkDeviceSize m_UsedSize;
 	};
 }

@@ -34,7 +34,7 @@ namespace en
 	}
 
 	void ImGuiRenderer::Resize(uint32_t width, uint32_t height) {
-		// ImGui_ImplVulkan_Shutdown();
+		ImGui_ImplVulkan_Shutdown();
 	}
 
 	void ImGuiRenderer::StartFrame()
@@ -93,7 +93,7 @@ namespace en
 				.inputAttachmentCount = 0,
 				.pInputAttachments = nullptr,
 				.colorAttachmentCount = 1,
-				.pColorAttachments = &swapchainAttachment,
+				.pColorAttachments = &colorAttachment,
 				.pResolveAttachments = nullptr,
 				.pDepthStencilAttachment = nullptr,
 				.preserveAttachmentCount = 0,

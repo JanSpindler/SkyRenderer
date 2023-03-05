@@ -5,12 +5,10 @@
 
 namespace en
 {
-	SimpleModelRenderer::SimpleModelRenderer(uint32_t width, uint32_t height, const Camera* camera, const Sun* sun, const GroundLighting &gl, size_t max_concurrent) :
+	SimpleModelRenderer::SimpleModelRenderer(uint32_t width, uint32_t height, const Camera* camera, size_t max_concurrent) :
 		m_FrameWidth(width),
 		m_FrameHeight(height),
 		m_Camera(camera),
-		m_Sun(sun),
-		m_GroundLighting(gl),
 		m_VertShader("simple_material/simple_material.vert", false),
 		m_FragShader("simple_material/simple_material.frag", false),
 		m_CommandPool(VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, VulkanAPI::GetGraphicsQFI()),
@@ -167,7 +165,8 @@ namespace en
 			// Render Model Instances
 			VkDeviceSize offsets[] = { 0 };
 			// TODO: one camera-set per concurrent frame.
-			std::vector<VkDescriptorSet> descSets = { 0, m_Camera->GetDescriptorSet(), 0, m_Sun->GetDescriptorSet(), m_GroundLighting.GetSampleDescriptorSet() };
+			VkDescriptorSet cameraDescSet = m_Camera->GetDescriptorSet();
+			std::vector<VkDescriptorSet> descSets = { 0, cameraDescSet, 0 };
 			for (const ModelInstance* modelInstance : m_ModelInstances)
 			{
 				const Model* model = modelInstance->GetModel();
@@ -178,15 +177,7 @@ namespace en
 					// Descriptor Sets
 					descSets[0] = modelInstance->GetDescriptorSet();
 					descSets[2] = mesh->GetMaterial()->GetDescriptorSet();
-					vkCmdBindDescriptorSets(
-						m_CommandBuffers[frame_indx], 
-						VK_PIPELINE_BIND_POINT_GRAPHICS, 
-						m_PipelineLayout, 
-						0, 
-						descSets.size(), 
-						descSets.data(), 
-						0, 
-						nullptr);
+					vkCmdBindDescriptorSets(m_CommandBuffers[frame_indx], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, descSets.size(), descSets.data(), 0, nullptr);
 
 					// Draw Mesh
 					VkBuffer vertexBuffer = mesh->GetVertexBufferVulkanHandle();
@@ -204,13 +195,10 @@ namespace en
 
 	void SimpleModelRenderer::CreatePipelineLayout(VkDevice device)
 	{
-		std::vector<VkDescriptorSetLayout> descSetLayouts = { 
-			ModelInstance::GetDescriptorSetLayout(),
-			Camera::GetDescriptorSetLayout(),
-			Material::GetDescriptorSetLayout(),
-			m_Sun->GetDescriptorSetLayout(),
-			m_GroundLighting.GetSampleDescriptorLayout()
-		};
+		VkDescriptorSetLayout modelDescSetLayout = ModelInstance::GetDescriptorSetLayout();
+		VkDescriptorSetLayout cameraDescSetLayout = Camera::GetDescriptorSetLayout();
+		VkDescriptorSetLayout materialDescSetLayout = Material::GetDescriptorSetLayout();
+		std::vector<VkDescriptorSetLayout> descSetLayouts = { modelDescSetLayout, cameraDescSetLayout, materialDescSetLayout };
 
 		VkPipelineLayoutCreateInfo layoutCreateInfo;
 		layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;

@@ -452,19 +452,19 @@ namespace en::vk
 			&m_SampleDescriptorLayout));
 
 		// Vulkan needs an array of layouts :/
-		std::vector<VkDescriptorSetLayout> layouts(1+m_ImageCount);
-		std::fill_n(layouts.begin(), 1+m_ImageCount, m_SampleDescriptorLayout);
+		VkDescriptorSetLayout layouts[1+m_ImageCount];
+		std::fill_n(layouts, 1+m_ImageCount, m_SampleDescriptorLayout);
 
 		VkDescriptorSetAllocateInfo allocInfo {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 			.pNext = nullptr,
 			.descriptorPool = m_DescriptorPool,
 			.descriptorSetCount = 1 + m_ImageCount,
-			.pSetLayouts = layouts.data()
+			.pSetLayouts = layouts
 		};
 
-		std::vector<VkDescriptorSet> sets(m_ImageCount+1);
-		ASSERT_VULKAN(vkAllocateDescriptorSets(device, &allocInfo, sets.data()));
+		VkDescriptorSet sets[m_ImageCount+1];
+		ASSERT_VULKAN(vkAllocateDescriptorSets(device, &allocInfo, sets));
 
 		m_DepthSampleDescriptor = sets[0];
 

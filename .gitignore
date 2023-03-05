@@ -10,18 +10,8 @@
 /Debug
 /SkyRenderer.dir
 /x64
-/out
 
 CMakeCache.txt
 cmake_install.cmake
 imgui.ini
 *.spv
-/doc/ex.toc
-/doc/ex.aux
-/doc/ex.fdb_latexmk
-/doc/ex.fls
-/doc/ex.log
-/doc/ex.pdf
-/doc/ex.synctex.gz
-/data/shader/generated/*
-!/data/shader/generated/.gitkeep

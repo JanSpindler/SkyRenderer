@@ -29,8 +29,7 @@ namespace en {
 			rayleigh_scattering_coefficient(conds.m_RefractiveIndexAir, conds.m_AirDensityAtSeaLevel, red_wavelength),
 			rayleigh_scattering_coefficient(conds.m_RefractiveIndexAir, conds.m_AirDensityAtSeaLevel, green_wavelength),
 			rayleigh_scattering_coefficient(conds.m_RefractiveIndexAir, conds.m_AirDensityAtSeaLevel, blue_wavelength)},
-		m_AsymmetryFactor(conds.m_AsymmetryFactor),
-		m_OzoneExtinctionCoefficient{conds.m_OzoneExtinctionCoefficient} { }
+		m_AsymmetryFactor(conds.m_AsymmetryFactor) { }
 
 	EnvConditions::EnvConditions(EnvConditions::Environment conds) :
 		m_Env{conds},
@@ -123,12 +122,12 @@ namespace en {
 	void EnvConditions::RenderImgui() {
 		ImGui::Begin("Env");
 		if (ImGui::SliderFloat("PlanetRadius", &m_Env.m_PlanetRadius, 2000000, 10000000) |
-			ImGui::SliderFloat("AtmosphereHeight", &m_Env.m_AtmosphereHeight, 10000, 5000000) |
-			ImGui::SliderFloat("RefractiveIndexAir", &m_Env.m_RefractiveIndexAir, 1.00001, 1.001, "%8f") |
+			ImGui::SliderFloat("AtmosphereHeight", &m_Env.m_AtmosphereHeight, 10000, 1000000) |
+			ImGui::SliderFloat("RefractiveIndexAir", &m_Env.m_RefractiveIndexAir, 1.00001, 1.001, "%6f") |
 			ImGui::SliderFloat("AirDensityAtSeaLevel", &m_Env.m_AirDensityAtSeaLevel, pow(10, 23), pow(10, 27)) |
-			ImGui::SliderFloat("MieScatteringCoefficient", &m_Env.m_MieScatteringCoefficient, 0.0000001, 0.0001, "%10f") |
+			ImGui::SliderFloat("MieScatteringCoefficient", &m_Env.m_MieScatteringCoefficient, 0.0000001, 0.00001, "%8f") |
 			// Mie should scatter forwards.
-			ImGui::SliderFloat("AsymmetryFactor", &m_Env.m_AsymmetryFactor, 0.01, 0.99, "%9f") |
+			ImGui::SliderFloat("AsymmetryFactor", &m_Env.m_AsymmetryFactor, -0.01, -0.99) |
 			ImGui::SliderFloat("RayleighScaleHeight", &m_Env.m_RayleighScaleHeight, 10, m_Env.m_AtmosphereHeight) |
 			ImGui::SliderFloat("MieScaleHeight", &m_Env.m_MieScaleHeight, 10, m_Env.m_AtmosphereHeight)) {
 
@@ -147,11 +146,11 @@ namespace en {
 		m_EnvUBO.MapMemory(sizeof(EnvironmentData), &m_EnvData, 0, 0);
 	}
 
-	VkDescriptorSet EnvConditions::GetDescriptorSet() const {
+	VkDescriptorSet EnvConditions::GetDescriptorSet() {
 		return m_DescriptorSet;
 	}
 
-	VkDescriptorSetLayout EnvConditions::GetDescriptorSetLayout() const {
+	VkDescriptorSetLayout EnvConditions::GetDescriptorSetLayout() {
 		return m_DescriptorSetLayout;
 	}
 

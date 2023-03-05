@@ -37,10 +37,10 @@ vec4 gathered_light(float h, float c_sun) {
 }
 
 void main() {
-	float tex_height = float(pc.offset + gl_WorkGroupID.x)/(GATHERING_RESOLUTION_HEIGHT-1);
-	float tex_sun = float(gl_WorkGroupID.y)/(GATHERING_RESOLUTION_SUN-1);
+	float tex_height = float(pc.offset + gl_WorkGroupID.x)/GATHERING_RESOLUTION_HEIGHT;
+	float tex_sun = float(gl_WorkGroupID.y)/GATHERING_RESOLUTION_SUN;
 
-	float actual_height = clamp(tex_to_height(tex_height, env.atmosphere_height), 0.3, env.atmosphere_height-1);
+	float actual_height = clamp(tex_to_height(tex_height, env.atmosphere_height), 0.3, env.atmosphere_height);
 	float c_sun = tex_to_sun(tex_sun);
 
 	vec4 gathered = gathered_light(actual_height, c_sun);

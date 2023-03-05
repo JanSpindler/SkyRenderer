@@ -53,12 +53,6 @@ namespace en
 		} while (m_Width <= 0 || m_Height <= 0);
 	}
 
-	void Window::EnableCursor(bool enableCursor)
-	{
-		int cursorMode = enableCursor ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED;
-		glfwSetInputMode(m_GLFWHandle, GLFW_CURSOR, cursorMode);
-	}
-
 	GLFWwindow* Window::GetGLFWHandle()
 	{
 		return m_GLFWHandle;

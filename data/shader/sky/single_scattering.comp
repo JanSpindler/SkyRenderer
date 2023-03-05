@@ -16,14 +16,16 @@ layout (push_constant) uniform push_constants {
 #include "functions.glsl"
 
 void main() {
-	float tex_height = float(pc.offset + gl_WorkGroupID.x)/(SCATTERING_RESOLUTION_HEIGHT-1);
-	float tex_view = float(gl_WorkGroupID.y)/(SCATTERING_RESOLUTION_VIEW-1);
-	float tex_sun = float(gl_WorkGroupID.z)/(SCATTERING_RESOLUTION_SUN-1);
+	float tex_height = float(pc.offset + gl_WorkGroupID.x)/SCATTERING_RESOLUTION_HEIGHT;
+	float tex_view = float(gl_WorkGroupID.y)/SCATTERING_RESOLUTION_VIEW;
+	float tex_sun = float(gl_WorkGroupID.z)/SCATTERING_RESOLUTION_SUN;
 
-	float actual_height = clamp(tex_to_height(tex_height, env.atmosphere_height), 0.3, env.atmosphere_height-1);
-	float c_view = clamp(tex_to_view(tex_view, actual_height, env.r_planet), -1, 1);
-	float c_sun = clamp(tex_to_sun(tex_sun), -1, 1);
+	float actual_height = tex_to_height(tex_height, env.atmosphere_height);
+	float c_view = tex_to_view(tex_view, actual_height, env.r_planet);
+	float c_sun = tex_to_sun(tex_sun);
 
+	// prevent stupid edgecases.
+	actual_height = clamp(actual_height, 0.3, env.atmosphere_height);
 
 	vec4 r_rgb_m_r = single_scattering(
 		actual_height,
@@ -35,7 +37,6 @@ void main() {
 		env.mie_scattering_coefficient,
 		env.rayleigh_scattering_coefficient,
 		env.mie_scattering_coefficient/0.9f,
-		env.ozone_extinction_coefficient,
 		env.r_planet,
 		env.r_atmosphere,
 		env.atmosphere_height,

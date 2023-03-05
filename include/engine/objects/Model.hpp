@@ -27,16 +27,13 @@ namespace en
 
 		void SetMeshMaterial(uint32_t index, const Material* material);
 
-	protected:
-		std::vector<Mesh*> m_Meshes;
-		std::vector<Material*> m_Materials;
-		std::unordered_map<std::string, vk::Texture2D*> m_Textures;
-
-		Model() {}
-
 	private:
 		std::string m_FilePath;
 		std::string m_Directory;
+
+		std::vector<Mesh*> m_Meshes;
+		std::vector<Material*> m_Materials;
+		std::unordered_map<std::string, vk::Texture2D*> m_Textures;
 
 		void ProcessNode(aiNode* node, const aiScene* scene, glm::mat4 parentT);
 		Mesh* ProcessMesh(aiMesh* mesh, const aiScene* scene, glm::mat4 t);

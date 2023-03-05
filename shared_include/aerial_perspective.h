@@ -1,6 +1,5 @@
 #define AP_X 32
 #define AP_Y 32
-// 16 may be insufficient for out-of-atmosphere -> down, 32 looks well.
 #define AP_Z 16
 
 #define AP_STEPS_PER_CELL 10

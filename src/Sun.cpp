@@ -135,10 +135,6 @@ namespace en {
 		m_UniformBuffer.MapMemory(sizeof(glm::vec3), &c, offsetof(SunData, m_Color), 0);
 	}
 
-	float Sun::GetZenith() const {
-		return m_SunData.m_Zenith;
-	}
-
 	VkDescriptorSetLayout Sun::GetDescriptorSetLayout() const {
 		return m_DescriptorSetLayout;
 	}
@@ -151,10 +147,7 @@ namespace en {
 		ImGui::Begin("Sun");
 		// use | so both are evaluated.
 		if (ImGui::DragFloat("zenith", &m_SunData.m_Zenith, 0.001) |
-			ImGui::DragFloat("azimuth", &m_SunData.m_Azimuth, 0.001) |
-			ImGui::DragFloat("Color_r", &m_SunData.m_Color.r, 0.001) |
-			ImGui::DragFloat("Color_g", &m_SunData.m_Color.g, 0.001) |
-			ImGui::DragFloat("Color_b", &m_SunData.m_Color.b, 0.001) ) {
+			ImGui::DragFloat("azimuth", &m_SunData.m_Azimuth, 0.001) ) {
 
 			m_SunData.m_SunDir = VecFromAngles(m_SunData.m_Zenith, m_SunData.m_Azimuth);
 			m_UniformBuffer.MapMemory(sizeof(SunData), &m_SunData, 0, 0);

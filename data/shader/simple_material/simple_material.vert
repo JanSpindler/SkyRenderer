@@ -14,12 +14,11 @@ layout (set = 0, binding = 0) uniform model_uniforms_t
 
 CAM_SET(1)
 
-layout(location = 0) out vec2 frag_uv;
-layout(location = 1) out vec3 frag_normal;
+layout (location = 0) out vec2 frag_uv;
 
 void main()
 {
 	gl_Position = cam.proj_view_mat * model_ubo.model_mat * vec4(pos, 1.0);
+
 	frag_uv = uv;
-	frag_normal = normal;
 }

@@ -8,10 +8,6 @@
 #include <engine/objects/Material.hpp>
 #include <engine/objects/Model.hpp>
 #include <vulkan/vulkan_core.h>
-#include <engine/objects/CloudData.hpp>
-#include <engine/graphics/vulkan/ComputePipeline.hpp>
-#include <engine/util/NoiseGenerator.hpp>
-#include <engine/objects/Wind.hpp>
 
 namespace en
 {
@@ -45,20 +41,12 @@ namespace en
 		vk::Texture2D::Init();
 		Material::Init();
 		ModelInstance::Init();
-		CloudData::Init();
-		vk::ComputePipeline::Init();
-		NoiseGenerator::Init();
-		Wind::Init();
 	}
 
 	void VulkanAPI::Shutdown()
 	{
 		Log::Info("Shutting down VulkanAPI");
 
-		Wind::Shutdown();
-		NoiseGenerator::Shutdown();
-		vk::ComputePipeline::Shutdown();
-		CloudData::Shutdown();
 		ModelInstance::Shutdown();
 		Material::Shutdown();
 		vk::Texture2D::Shutdown();
@@ -183,7 +171,7 @@ namespace en
 
 		// Select wanted layers
 		std::vector<const char*> layers = {
-			// "VK_LAYER_KHRONOS_validation"
+			"VK_LAYER_KHRONOS_validation"
 		};
 
 		// List supported extensions
@@ -289,16 +277,37 @@ namespace en
 
 			// Graphics QFI
 			uint32_t graphicsQFI = UINT32_MAX;
+			for (size_t i = 0; i < queueFamilies.size(); i++)
+			{
+				if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+				{
+					graphicsQFI = i;
+					break;
+				}
+			}
+
+			// Present Support / QFI
+			uint32_t presentQFI = UINT32_MAX;
 			VkBool32 presentSupport = VK_FALSE;
 			for (size_t i = 0; i < queueFamilies.size(); i++)
 			{
-				// find queue with compute, graphics and present capabilities.
 				vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, m_Surface, &presentSupport);
-				if (
-					queueFamilies[i].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT) &&
-					presentSupport == VK_TRUE)
+				if (presentSupport == VK_TRUE)
 				{
-					graphicsQFI = i;
+					presentQFI = i;
+					break;
+				}
+			}
+
+			// Present Support / QFI
+			uint32_t computeQFI = UINT32_MAX;
+			VkBool32 computeSupport = VK_FALSE;
+			for (size_t i = 0; i < queueFamilies.size(); i++)
+			{
+				vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, m_Surface, &computeSupport);
+				if (computeSupport == VK_TRUE)
+				{
+					computeQFI = i;
 					break;
 				}
 			}
@@ -343,6 +352,8 @@ namespace en
 			if (isDiscreteGPU &&
 				hasGeometryShader &&
 				graphicsQFI != UINT32_MAX &&
+				presentQFI != UINT32_MAX &&
+				computeQFI != UINT32_MAX &&
 				formatAvailable)
 			{
 				Log::Info(
@@ -351,8 +362,8 @@ namespace en
 
 				m_PhysicalDeviceInfo = physicalDeviceInfo;
 				m_GraphicsQFI = graphicsQFI;
-				m_PresentQFI = graphicsQFI;
-				m_ComputeQFI = graphicsQFI;
+				m_PresentQFI = presentQFI;
+				m_ComputeQFI = presentQFI;
 
 				m_SurfaceCapabilities = surfaceCapabilities;
 				m_SurfaceFormat = bestFormat;
@@ -394,19 +405,32 @@ namespace en
 			Log::Info("\t-" + std::string(extension.extensionName));
 
 		// Select wanted extensions
-		std::vector<const char*> extensions = { 
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-			VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME };
+		std::vector<const char*> extensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME };
 
+		std::map<uint32_t, uint32_t> qfi_needed { {m_GraphicsQFI, 0}, {m_ComputeQFI, 0}, {m_PresentQFI, 0} };
+		// need queue for graphics, compute, present.
+		// may be one queue capable of everything
+		// may be three different queues.
+		qfi_needed[m_GraphicsQFI] = 1;
+		qfi_needed[m_ComputeQFI] = 1;
+		qfi_needed[m_PresentQFI] = 1;
+
+		// all queues will have the same priority (for now), pass to each
 		float priority = 1.0f;
-		VkDeviceQueueCreateInfo queueCreateInfo;
-		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queueCreateInfo.pNext = nullptr;
-		queueCreateInfo.flags = 0;
-		queueCreateInfo.queueFamilyIndex = m_GraphicsQFI;
-		queueCreateInfo.queueCount = 1;
-		queueCreateInfo.pQueuePriorities = &priority;
 
+		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
+		// i.first is qfi, i.second is count/number of queues created for that family.
+		for (std::map<uint32_t, uint32_t>::iterator i = qfi_needed.begin(); i != qfi_needed.end(); ++i) {
+			VkDeviceQueueCreateInfo queueCreateInfo;
+			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			queueCreateInfo.pNext = nullptr;
+			queueCreateInfo.flags = 0;
+			queueCreateInfo.queueFamilyIndex = i->first;
+			queueCreateInfo.queueCount = i->second;
+			queueCreateInfo.pQueuePriorities = &priority;
+
+			queueCreateInfos.push_back(queueCreateInfo);
+		}
 		// enable float64 for sky-vertex shader.
 		VkPhysicalDeviceFeatures features {};
 		features.shaderFloat64 = VK_TRUE;
@@ -416,8 +440,8 @@ namespace en
 		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		createInfo.pNext = nullptr;
 		createInfo.flags = 0;
-		createInfo.queueCreateInfoCount = 1;
-		createInfo.pQueueCreateInfos = &queueCreateInfo;
+		createInfo.queueCreateInfoCount = queueCreateInfos.size();
+		createInfo.pQueueCreateInfos = queueCreateInfos.data();
 		createInfo.enabledLayerCount = layers.size();
 		createInfo.ppEnabledLayerNames = layers.data();
 		createInfo.enabledExtensionCount = extensions.size();
@@ -427,9 +451,15 @@ namespace en
 		VkResult result = vkCreateDevice(physicalDevice, &createInfo, nullptr, &m_Device);
 		ASSERT_VULKAN(result);
 
-		VkQueue queue;
-		vkGetDeviceQueue(m_Device, m_GraphicsQFI, 0, &m_GraphicsQueue);
-		m_PresentQueue = m_GraphicsQueue;
-		m_ComputeQueue = m_GraphicsQueue;
+		for (auto i : qfi_needed) {
+			VkQueue queue;
+			vkGetDeviceQueue(m_Device, m_GraphicsQFI, 0, &queue);
+			if (i.first == m_GraphicsQFI)
+				m_GraphicsQueue = queue;
+			if (i.first == m_ComputeQFI)
+				m_ComputeQueue = queue;
+			if (i.first == m_PresentQFI)
+				m_PresentQueue = queue;
+		}
 	}
 }

@@ -35,9 +35,6 @@ namespace en
 		void Destroy();
 		void UpdateUBO();
 
-		void Move(const glm::vec3& move);
-		void RotateViewDir(float phi, float theta);
-
 		const glm::vec3& GetPos() const;
 		void SetPos(const glm::vec3& pos);
 
@@ -73,7 +70,6 @@ namespace en
 		glm::vec3 m_Pos;
 		glm::vec3 m_ViewDir;
 		glm::vec3 m_Up;
-
 		float m_AspectRatio;
 		float m_Fov;
 		float m_NearPlane;

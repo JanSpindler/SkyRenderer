@@ -62,7 +62,7 @@ namespace en
 	void SkyRenderer::CreatePipelineLayout(VkDevice device)
 	{
 		std::vector<VkDescriptorSetLayout> descSetLayouts;
-		descSetLayouts.resize(9);
+		descSetLayouts.resize(7);
 		descSetLayouts[SKY_SETS_CAM] = Camera::GetDescriptorSetLayout();
 		descSetLayouts[SKY_SETS_SUN] = m_Sun.GetDescriptorSetLayout();
 		descSetLayouts[SKY_SETS_SCTEXTURE0] = m_Atmosphere.GetScatteringSampleDescriptorLayout();
@@ -70,8 +70,6 @@ namespace en
 		descSetLayouts[SKY_SETS_RATIO] = m_Precomp.GetRatioDescriptorSetLayout();
 		descSetLayouts[SKY_SETS_ENV0] = m_Precomp.GetEffectiveEnv(0).GetDescriptorSetLayout();
 		descSetLayouts[SKY_SETS_ENV1] = m_Precomp.GetEffectiveEnv(1).GetDescriptorSetLayout();
-		descSetLayouts[SKY_SETS_TRANSMITTANCE0] = m_Atmosphere.GetTransmittanceSampleDescriptorLayout();
-		descSetLayouts[SKY_SETS_TRANSMITTANCE1] = m_Atmosphere.GetTransmittanceSampleDescriptorLayout();
 
 		VkPipelineLayoutCreateInfo layoutCreateInfo;
 		layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -290,7 +288,7 @@ namespace en
 	{
 		// Bind pipeline
 		vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-		std::vector<VkDescriptorSet> sets(9);
+		std::vector<VkDescriptorSet> sets(7);
 		sets[SKY_SETS_CAM] = m_Camera->GetDescriptorSet();
 		sets[SKY_SETS_SUN] = m_Sun.GetDescriptorSet();
 		sets[SKY_SETS_SCTEXTURE0] = m_Atmosphere.GetScatteringSampleDescriptorSet(0);
@@ -298,8 +296,6 @@ namespace en
 		sets[SKY_SETS_RATIO] = m_Precomp.GetRatioDescriptorSet();
 		sets[SKY_SETS_ENV0] = m_Precomp.GetEffectiveEnv(0).GetDescriptorSet();
 		sets[SKY_SETS_ENV1] = m_Precomp.GetEffectiveEnv(1).GetDescriptorSet();
-		sets[SKY_SETS_TRANSMITTANCE0] = m_Atmosphere.GetTransmittanceSampleDescriptorSet(0);
-		sets[SKY_SETS_TRANSMITTANCE1] = m_Atmosphere.GetTransmittanceSampleDescriptorSet(1);
 
 		vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, sets.size(), sets.data(), 0, nullptr);
 

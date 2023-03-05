@@ -34,8 +34,7 @@ namespace en
 		m_MaxConcurrent{max_concurrent},
 		m_GraphicsPipeline{VK_NULL_HANDLE},
 		m_ColorInputAttachmentDSs(max_concurrent, VK_NULL_HANDLE),
-		m_DepthInputAttachmentDSs(max_concurrent, VK_NULL_HANDLE),
-		m_DescriptorPool{VK_NULL_HANDLE}
+		m_DepthInputAttachmentDSs(max_concurrent, VK_NULL_HANDLE)
 	{
 		VkDevice device = VulkanAPI::GetDevice();
 

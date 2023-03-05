@@ -13,14 +13,14 @@ namespace en {
 
 			void Precompute() const;
 
-			VkDescriptorSetLayout GetScatteringSampleDescriptorLayout() const;
-			VkDescriptorSet GetScatteringSampleDescriptorSet(size_t sum_target) const;
+			VkDescriptorSetLayout GetScatteringSampleDescriptorLayout();
+			VkDescriptorSet GetScatteringSampleDescriptorSet(size_t sum_target);
 
-			VkDescriptorSetLayout GetTransmittanceSampleDescriptorLayout() const;
-			VkDescriptorSet GetTransmittanceSampleDescriptorSet(size_t sum_target) const;
+			VkDescriptorSetLayout GetTransmittanceSampleDescriptorLayout();
+			VkDescriptorSet GetTransmittanceSampleDescriptorSet(size_t sum_target);
 
-			VkDescriptorSetLayout GetGatheringSampleDescriptorLayout() const;
-			VkDescriptorSet GetGatheringSampleDescriptorSet(size_t sum_target) const;
+			VkDescriptorSetLayout GetGatheringSampleDescriptorLayout();
+			VkDescriptorSet GetGatheringSampleDescriptorSet(size_t sum_target);
 
 			EnvConditions &GetEnv();
 

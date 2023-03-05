@@ -23,7 +23,7 @@ void main()
 	int index = indices[gl_VertexIndex];
 
 	gl_Position = vec4(pos[index], 1.0, 1.0);
-	dvec4 pos = dmat4(cam.proj_view_mat_inv)*dvec4(pos[index], 0, 1);
+	dvec4 pos = dmat4(cam.proj_view_mat_inv)*dvec4(gl_Position);
 	// normalize
 	pos_cam_relative = vec3(pos.xyz/pos.w - dvec3(cam.pos));
 	// vec4 pos = inverse(camera_ubo.proj_view_mat)*gl_Position;

@@ -13,7 +13,7 @@ namespace en::vk
 
 	void Texture2D::Init()
 	{
-		m_DummyTex = new vk::Texture2D("data/image/dummy.png", VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+		m_DummyTex = new vk::Texture2D("data/image/dummy.png", VK_SAMPLER_ADDRESS_MODE_REPEAT);
 	}
 
 	void Texture2D::Shutdown()
@@ -27,7 +27,7 @@ namespace en::vk
 		return m_DummyTex;
 	}
 
-	Texture2D::Texture2D(const std::string& fileName, VkFilter filter, VkSamplerAddressMode addressMode) :
+	Texture2D::Texture2D(const std::string& fileName, VkSamplerAddressMode addressMode) :
 		m_ImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED)
 	{
 		int width;
@@ -43,36 +43,9 @@ namespace en::vk
 		m_RealChannelCount = 4;
 		m_SourceChannelCount = static_cast<uint32_t>(channelCount);
 
-		LoadToDevice(data, filter, addressMode);
+		LoadToDevice(data, addressMode);
 
 		stbi_image_free(data);
-	}
-
-	Texture2D::Texture2D(const std::array<std::vector<std::vector<float>>, 4>& data, VkFilter filter, VkSamplerAddressMode addressMode) :
-		m_Width(data[0].size()),
-		m_Height(data[0][0].size()),
-		m_SourceChannelCount(4),
-		m_RealChannelCount(4),
-		m_ImageLayout(VK_IMAGE_LAYOUT_PREINITIALIZED)
-	{
-		// TODO: check for homogenous data size
-		
-		// Copy data into linear buffer
-		std::vector<uint8_t> dataArray(m_Width * m_Height * m_RealChannelCount);
-		for (uint32_t i = 0; i < m_Width; i++)
-		{
-			for (uint32_t j = 0; j < m_Height; j++)
-			{
-				for (uint32_t c = 0; c < m_RealChannelCount; c++)
-				{
-					float fVal = std::max(0.0f, static_cast<float>(data[c][i][j] * 255.0f));
-					uint32_t index = c + m_RealChannelCount * i + m_RealChannelCount * m_Width * j;
-					dataArray[index] = static_cast<uint8_t>(fVal);
-				}
-			}
-		}
-
-		LoadToDevice(dataArray.data(), filter, addressMode);
 	}
 
 	void Texture2D::Destroy()
@@ -120,7 +93,7 @@ namespace en::vk
 		return m_Sampler;
 	}
 
-	void Texture2D::LoadToDevice(const void* data, VkFilter filter, VkSamplerAddressMode addressMode)
+	void Texture2D::LoadToDevice(void* data, VkSamplerAddressMode addressMode)
 	{
 		VkDevice device = VulkanAPI::GetDevice();
 		VkDeviceSize size = static_cast<VkDeviceSize>(GetSizeInBytes());
@@ -221,8 +194,8 @@ namespace en::vk
 		samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 		samplerCreateInfo.pNext = nullptr;
 		samplerCreateInfo.flags = 0;
-		samplerCreateInfo.magFilter = filter;
-		samplerCreateInfo.minFilter = filter;
+		samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+		samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
 		samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 		samplerCreateInfo.addressModeU = addressMode;
 		samplerCreateInfo.addressModeV = addressMode;

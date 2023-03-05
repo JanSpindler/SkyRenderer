@@ -1,14 +1,13 @@
 #include <engine/graphics/vulkan/Shader.hpp>
 #include <engine/graphics/VulkanAPI.hpp>
 #include <engine/util/Log.hpp>
-#include <engine/util/ReadFile.hpp>
+#include <engine/util/ReadFileBinary.hpp>
 
 const std::string compilerPath = "glslc";
 const std::string shaderDirPath = "data/shader/";
 
 namespace en::vk
 {
-	Shader::Shader() {}
 	Shader::Shader(const std::vector<char>& code)
 	{
 		Create(code);
@@ -18,22 +17,21 @@ namespace en::vk
 	{
 		std::string fullFilePath = shaderDirPath + fileName;
 
-		std::string outputFileName = fullFilePath + ".spv";
+		std::string outputFileName = fullFilePath;
 
 		if (!compiled)
 		{
+			outputFileName += ".spv";
 			std::string command = compilerPath + " " +
 			                      fullFilePath +
 			                      " -o " + outputFileName +
 			                      " -I shared_include" +
 			                      // shaderDirPath includes '/'.
-			                      " -I " + shaderDirPath + "include" +
-			                      " -O -I " + shaderDirPath + "generated";
+			                      " -I " + shaderDirPath + "include";
 			Log::Info("Shader Compile Command: " + command);
 
 			// Compile
-			if (std::system(command.c_str()) != 0)
-				Log::Error("Failed to compile shader", true);
+			std::system(command.c_str());
 		}
 
 		Create(ReadFileBinary(outputFileName));

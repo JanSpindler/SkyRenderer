@@ -35,9 +35,6 @@ SubpassRenderer::SubpassRenderer(
 	CreateAttachments(device);
 
 	CreateRenderPass();
-	for (size_t i = 0; i != m_Subpasses.size(); i++)
-		m_Subpasses[i]->CreatePipeline(i, m_RenderPass);
-
 	CreateFramebuffers();
 	auto swapchainColorImageViews = m_Swapchain.GetColorImageViews();
 	for (auto sp : m_Subpasses)
@@ -95,7 +92,7 @@ void SubpassRenderer::CreateAttachments(VkDevice device) {
 	uint32_t graphicsQfi = VulkanAPI::GetGraphicsQFI();
 
 	// use same format as swapchaing image, maybe change that later.
-	m_ColorFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+	m_ColorFormat = m_Swapchain.GetColorFormat();
 
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -278,6 +275,9 @@ void SubpassRenderer::CreateRenderPass() {
 
 	VkResult result = vkCreateRenderPass(device, &createInfo, nullptr, &m_RenderPass);
 	ASSERT_VULKAN(result);
+
+	for (size_t i = 0; i != m_Subpasses.size(); i++)
+		m_Subpasses[i]->CreatePipeline(i, m_RenderPass);
 }
 
 void SubpassRenderer::CreateFramebuffers() {

@@ -1,8 +1,6 @@
 #pragma once
 
 #include <engine/graphics/Common.hpp>
-#include <vector>
-#include <array>
 
 namespace en::vk
 {
@@ -14,8 +12,7 @@ namespace en::vk
 
 		static const Texture2D* GetDummyTex();
 
-		Texture2D(const std::string& fileName, VkFilter filter, VkSamplerAddressMode addressMode);
-		Texture2D(const std::array<std::vector<std::vector<float>>, 4>& data, VkFilter filter, VkSamplerAddressMode addressMode);
+		Texture2D(const std::string& fileName, VkSamplerAddressMode addressMode);
 
 		void Destroy();
 
@@ -42,7 +39,7 @@ namespace en::vk
 		VkImageLayout m_ImageLayout;
 		VkSampler m_Sampler;
 
-		void LoadToDevice(const void* data, VkFilter filter, VkSamplerAddressMode addressMode);
+		void LoadToDevice(void* data, VkSamplerAddressMode addressMode);
 		void ChangeLayout(VkImageLayout layout, VkCommandBuffer commandBuffer, VkQueue queue);
 		void WriteBufferToImage(VkCommandBuffer commandBuffer, VkQueue queue, VkBuffer buffer);
 	};

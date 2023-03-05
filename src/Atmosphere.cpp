@@ -20,13 +20,6 @@
 
 #define IMAGE_COUNT (GATHERING_IMAGE_COUNT+SCATTERING_IMAGE_COUNT+TRANSMITTANCE_IMAGE_COUNT)
 
-constexpr VkMemoryBarrier computeMemoryBarrier {
-	.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-	.pNext = nullptr,
-	.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-	.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT
-};
-
 namespace en {
 	Atmosphere::Atmosphere(VkDescriptorSetLayout env) :
 		m_ComputeCommandPool(0, VulkanAPI::GetComputeQFI()),
@@ -308,7 +301,7 @@ namespace en {
 		// vector for contiguous memory.
 		std::vector<uint32_t> qvec{queues.begin(), queues.end()};
 
-		m_ComputeImageFormat = VK_FORMAT_R16G16B16A16_UNORM;
+		m_ComputeImageFormat = VK_FORMAT_R16G16B16A16_SNORM;
 		// do better testing.
 		assert(VulkanAPI::IsFormatSupported(
 			m_ComputeImageFormat,
@@ -326,6 +319,7 @@ namespace en {
 		imageInfo.format = m_ComputeImageFormat;
 		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
 		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 		// will only be accessed by one queue at a time (for now).
 		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -340,7 +334,6 @@ namespace en {
 		std::vector<VkDeviceMemory> scatteringImageMemory(SCATTERING_IMAGE_COUNT);
 
 		// TODO: allocate into one block, pass offsets to vkBindImageMemory.
-		imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
 		for (int i = 0; i != SCATTERING_IMAGE_COUNT; ++i) {
 			ASSERT_VULKAN(vkCreateImage(device, &imageInfo, nullptr, &scatteringImages[i]));
 
@@ -371,8 +364,6 @@ namespace en {
 		imageInfo.extent.width = GATHERING_RESOLUTION_HEIGHT;
 		imageInfo.extent.height = GATHERING_RESOLUTION_SUN;
 		imageInfo.extent.depth = 1;
-		// transfer dst for clearing sum image.
-		imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 		for (int i = 0; i != GATHERING_IMAGE_COUNT; ++i) {
 			ASSERT_VULKAN(vkCreateImage(device, &imageInfo, nullptr, &gatheringImages[i]));
 
@@ -401,7 +392,6 @@ namespace en {
 
 		imageInfo.extent.width = TRANSMITTANCE_RESOLUTION_HEIGHT;
 		imageInfo.extent.height = TRANSMITTANCE_RESOLUTION_VIEW;
-		imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
 		imageInfo.extent.depth = 1;
 		for (int i = 0; i != TRANSMITTANCE_IMAGE_COUNT; ++i) {
 			ASSERT_VULKAN(vkCreateImage(device, &imageInfo, nullptr, &transmittanceImages[i]));
@@ -681,17 +671,6 @@ namespace en {
 
 		ASSERT_VULKAN(vkBeginCommandBuffer(buf, &beginInfo));
 
-		// TODO: do this in separate buffer+function (another task in precomputer).
-		VkClearColorValue clearColors {0,0,0,0};
-		VkImageSubresourceRange subresourceRanges {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-			.baseMipLevel = 0,
-			.levelCount = 1,
-			.baseArrayLayer = 0,
-			.layerCount = 1
-		};
-		vkCmdClearColorImage(buf, m_GatheringSumImage[sum_target], VK_IMAGE_LAYOUT_GENERAL, &clearColors, 1, &subresourceRanges);
-
 		vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_COMPUTE, m_TPipeline);
 
 		std::vector<VkDescriptorSet> sets(2);
@@ -717,9 +696,6 @@ namespace en {
 		// single scattering
 		ASSERT_VULKAN(vkBeginCommandBuffer(buf, &beginInfo));
 
-		// wait for previous compute (we need the full results of the previous scattering order).
-		vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &computeMemoryBarrier, 0, nullptr, 0, nullptr);
-
 		vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_COMPUTE, m_SSPipeline);
 
 		std::vector<VkDescriptorSet> sets(4);
@@ -729,6 +705,7 @@ namespace en {
 		sets[SS_SETS_ENV] = env;
 		vkCmdBindDescriptorSets(buf, VK_PIPELINE_BIND_POINT_COMPUTE, m_SSPipelineLayout, 0, sets.size(), sets.data(), 0, nullptr);
 		vkCmdPushConstants(buf, m_SSPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &offset);
+
 		vkCmdDispatch(buf, count, SCATTERING_RESOLUTION_VIEW, SCATTERING_RESOLUTION_SUN);
 
 		vkEndCommandBuffer(buf);
@@ -743,9 +720,6 @@ namespace en {
 		beginInfo.pInheritanceInfo = nullptr;
 
 		ASSERT_VULKAN(vkBeginCommandBuffer(buf, &beginInfo));
-
-		// wait for previous compute (we need the full results of the previous scattering order).
-		vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &computeMemoryBarrier, 0, nullptr, 0, nullptr);
 
 		vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_COMPUTE, m_MSPipeline);
 
@@ -766,8 +740,6 @@ namespace en {
 			0,
 			nullptr);
 		vkCmdPushConstants(buf, m_MSPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &offset);
-
-		vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &computeMemoryBarrier, 0, nullptr, 0, nullptr);
 		vkCmdDispatch(buf,
 			count,
 			SCATTERING_RESOLUTION_VIEW,
@@ -784,9 +756,6 @@ namespace en {
 		beginInfo.pInheritanceInfo = nullptr;
 
 		ASSERT_VULKAN(vkBeginCommandBuffer(buf, &beginInfo));
-
-		// wait for previous compute (we need the full results of the previous scattering order).
-		vkCmdPipelineBarrier(buf, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &computeMemoryBarrier, 0, nullptr, 0, nullptr);
 
 		vkCmdBindPipeline(buf, VK_PIPELINE_BIND_POINT_COMPUTE, m_GPipeline);
 		// always 3 descriptorSets from now on.
@@ -807,7 +776,6 @@ namespace en {
 			0,
 			nullptr);
 		vkCmdPushConstants(buf, m_GPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &offset);
-
 		vkCmdDispatch(buf,
 			count,
 			GATHERING_RESOLUTION_SUN,
@@ -817,12 +785,12 @@ namespace en {
 	}
 
 	// all three use the same layout, but that may change, so different functions make sense for now.
-	VkDescriptorSetLayout Atmosphere::GetScatteringSampleDescriptorLayout() const { return m_SampleDescriptorLayout; }
-	VkDescriptorSet Atmosphere::GetScatteringSampleDescriptorSet(size_t sum_target) const {  return m_ScatteringSumSampleDescriptor[sum_target]; }
+	VkDescriptorSetLayout Atmosphere::GetScatteringSampleDescriptorLayout() { return m_SampleDescriptorLayout; }
+	VkDescriptorSet Atmosphere::GetScatteringSampleDescriptorSet(size_t sum_target) {  return m_ScatteringSumSampleDescriptor[sum_target]; }
 
-	VkDescriptorSetLayout Atmosphere::GetTransmittanceSampleDescriptorLayout() const {  return m_SampleDescriptorLayout; }
-	VkDescriptorSet Atmosphere::GetTransmittanceSampleDescriptorSet(size_t sum_target) const {  return m_TransmittanceSampleDescriptor[sum_target]; }
+	VkDescriptorSetLayout Atmosphere::GetTransmittanceSampleDescriptorLayout() {  return m_SampleDescriptorLayout; }
+	VkDescriptorSet Atmosphere::GetTransmittanceSampleDescriptorSet(size_t sum_target) {  return m_TransmittanceSampleDescriptor[sum_target]; }
 
-	VkDescriptorSetLayout Atmosphere::GetGatheringSampleDescriptorLayout() const {  return m_SampleDescriptorLayout; }
-	VkDescriptorSet Atmosphere::GetGatheringSampleDescriptorSet(size_t sum_target) const {  return m_GatheringSumSampleDescriptor[sum_target]; }
+	VkDescriptorSetLayout Atmosphere::GetGatheringSampleDescriptorLayout() {  return m_SampleDescriptorLayout; }
+	VkDescriptorSet Atmosphere::GetGatheringSampleDescriptorSet(size_t sum_target) {  return m_GatheringSumSampleDescriptor[sum_target]; }
 }

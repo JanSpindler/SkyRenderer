@@ -26,8 +26,6 @@ namespace en {
 			void SetAzimuth(float a);
 			void SetColor(glm::vec3 c);
 
-			float GetZenith() const;
-
 			VkDescriptorSetLayout GetDescriptorSetLayout() const;
 			VkDescriptorSet GetDescriptorSet() const;
 

@@ -51,8 +51,7 @@ namespace en::vk
 		commandPool.Destroy();
 	}
 
-	Buffer::Buffer(VkDeviceSize size, VkMemoryPropertyFlags memoryProperties, VkBufferUsageFlags usage, const std::vector<uint32_t>& qfis) :
-		m_UsedSize(size)
+	Buffer::Buffer(VkDeviceSize size, VkMemoryPropertyFlags memoryProperties, VkBufferUsageFlags usage, const std::vector<uint32_t>& qfis)
 	{
 		VkDevice device = VulkanAPI::GetDevice();
 
@@ -121,26 +120,8 @@ namespace en::vk
 		vkUnmapMemory(device, m_DeviceMemory);
 	}
 
-	void Buffer::GetData(VkDeviceSize size, void* dst, VkDeviceSize offset, VkMemoryMapFlags mapFlags)
-	{
-		VkDevice device = VulkanAPI::GetDevice();
-		
-		void* mappedMemory;
-		VkResult result = vkMapMemory(device, m_DeviceMemory, offset, size, mapFlags, &mappedMemory);
-		ASSERT_VULKAN(result);
-
-		memcpy(dst, mappedMemory, static_cast<size_t>(size));
-
-		vkUnmapMemory(device, m_DeviceMemory);
-	}
-
 	VkBuffer Buffer::GetVulkanHandle() const
 	{
 		return m_VulkanHandle;
-	}
-
-	VkDeviceSize Buffer::GetUsedSize() const
-	{
-		return m_UsedSize;
 	}
 }

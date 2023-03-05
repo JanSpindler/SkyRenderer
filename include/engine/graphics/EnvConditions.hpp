@@ -9,7 +9,6 @@ namespace en {
 	class EnvConditions {
 		public:
 			struct Environment {
-				glm::vec3 m_OzoneExtinctionCoefficient;
 				float m_PlanetRadius;
 				float m_AtmosphereHeight;
 				float m_RefractiveIndexAir;
@@ -25,8 +24,8 @@ namespace en {
 			~EnvConditions();
 
 			void RenderImgui();
-			VkDescriptorSet GetDescriptorSet() const;
-			VkDescriptorSetLayout GetDescriptorSetLayout() const;
+			VkDescriptorSet GetDescriptorSet();
+			VkDescriptorSetLayout GetDescriptorSetLayout();
 			Environment GetEnvironment();
 			void SetEnvironment(const Environment &env);
 
@@ -37,7 +36,6 @@ namespace en {
 				float m_PlanetRadius;
 				glm::vec3 m_MieSCoeff;
 				float m_AtmosphereRadius;
-				glm::vec3 m_OzoneExtinctionCoefficient;
 				float m_AtmosphereHeight;
 				float m_AsymmetryFactor;
 				float m_RayleighScaleHeight;

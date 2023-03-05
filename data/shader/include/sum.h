@@ -1,2 +1,0 @@
-#define SUM_SETS_SAMPLE 0
-#define SUM_SETS_STORE 1

@@ -10,11 +10,6 @@ layout (input_attachment_index = COLOR_ATTACHMENT_INDEX, set = PP_SETS_INPUT_ATT
 
 layout(location = 0) out vec4 out_color;
 
-float exposure = 0.5;
-
 void main() {
-	vec3 in_color = subpassLoad(colorInput).xyz;
-	/* in_color = vec3(1) - exp(-in_color*exposure); */
-	in_color = pow(in_color, vec3(1/2.2f));
-	out_color = vec4(in_color, 1);
+	out_color = subpassLoad(colorInput);
 }

@@ -1,4 +1,3 @@
-#include <glm/gtx/dual_quaternion.hpp>
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <engine/graphics/Camera.hpp>
 #include <engine/graphics/VulkanAPI.hpp>
@@ -84,7 +83,6 @@ namespace en
 		m_Fov(fov),
 		m_NearPlane(nearPlane),
 		m_FarPlane(farPlane),
-		m_ViewDir{glm::vec3(0,0,1)},
 		m_UniformBuffer(new vk::Buffer(
 			sizeof(CamParams),
 			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
@@ -134,17 +132,27 @@ namespace en
 	void Camera::Destroy()
 	{
 		m_UniformBuffer->Destroy();
+		delete m_UniformBuffer;
 	}
 
 	void Camera::UpdateUBO()
 	{
 		glm::mat4 projMat = glm::perspective(m_Fov, m_AspectRatio, m_NearPlane, m_FarPlane);
-		glm::mat4 viewMat = glm::lookAt(glm::vec3(0,0,0), glm::vec3(m_ViewDir), m_Up);
-		// invert before applying translation, better numerical stability.
-		glm::mat4 viewMatInv = glm::inverse(viewMat);
-			
-		viewMat *= glm::translate(-m_Pos);
-		viewMatInv = glm::translate(m_Pos) * viewMatInv;
+		// Create view-matrix withoug glm::lookAt, leads to imprecise results due to float and big numbers.
+		glm::vec3 w = -glm::vec3(glm::rotate(glm::identity<glm::mat4>(), m_Zenith, glm::vec3(1,0,0)) * glm::vec4(m_Up, 1));
+		glm::vec3 u = glm::normalize(glm::cross(m_Up, w));
+		glm::vec3 v = glm::normalize(glm::cross(w, u));
+
+		// view along -z, subtract 90deg so zenith angle of 0deg is up.
+		// inverse of glm::inverse(glm::translate(m_Pos)*glm::rotate(glm::identity<glm::mat4>(), -float(M_PI_2)+m_Zenith, glm::vec3(1,0,0))*glm::scale(glm::vec3(-1,1,-1)));
+		glm::mat4 viewMat =
+			glm::scale(glm::vec3(-1,1,-1))*
+			glm::rotate(glm::identity<glm::mat4>(), float(M_PI_2)-m_Zenith, glm::vec3(1,0,0))*
+			glm::translate(-m_Pos);
+		glm::mat4 viewMatInv =
+			glm::translate(m_Pos)*
+			glm::rotate(glm::identity<glm::mat4>(), m_Zenith-float(M_PI_2), glm::vec3(1,0,0))*
+			glm::scale(glm::vec3(-1,1,-1));
 
 		m_UboData.m_Pos = m_Pos;
 		m_UboData.m_projView = projMat * viewMat;
@@ -158,31 +166,12 @@ namespace en
 
 	void Camera::RenderImgui()
 	{
+		// bitwise or to eval both
 		ImGui::Begin("Cam");
-
-		ImGui::DragFloat("Height", &m_Pos.y, 1000000, 10, 1000000000, "%g", ImGuiSliderFlags_Logarithmic);
-		ImGui::DragFloat("zenith", &m_Zenith, 0.001, -FLT_MAX, FLT_MAX);
-
+		if (ImGui::DragFloat("Height", &m_Pos.y, 1000000, 10, 1000000000, "%g", ImGuiSliderFlags_Logarithmic) | 
+			ImGui::DragFloat("zenith", &m_Zenith, 0.001, -FLT_MAX, FLT_MAX))
+			UpdateUBO();
 		ImGui::End();
-	}
-
-	void Camera::Move(const glm::vec3& move)
-	{
-		glm::vec3 frontMove = glm::normalize(m_ViewDir * glm::vec3(1.0f, 0.0f, 1.0f)) * move.z;
-		glm::vec3 sideMove = glm::normalize(glm::cross(m_ViewDir, m_Up)) * move.x;
-		glm::vec3 upMove(0.0f, move.y, 0.0f);
-		m_Pos += frontMove + sideMove + upMove;
-	}
-
-	void Camera::RotateViewDir(float phi, float theta)
-	{
-		glm::vec3 phiAxis = m_Up;
-		glm::mat3 phiMat = glm::rotate(glm::identity<glm::mat4>(), phi, phiAxis);
-
-		glm::vec3 thetaAxis = glm::normalize(glm::cross(m_ViewDir, m_Up));
-		glm::mat3 thetaMat = glm::rotate(glm::identity<glm::mat4>(), theta, thetaAxis);
-
-		m_ViewDir = glm::normalize(thetaMat * phiMat * m_ViewDir);
 	}
 
 	const glm::vec3& Camera::GetPos() const
@@ -251,7 +240,7 @@ namespace en
 
 	void Camera::SetNearPlane(float nearPlane)
 	{
-		m_NearPlane= nearPlane;
+		m_NearPlane = nearPlane;
 	}
 
 	float Camera::GetFarPlane() const

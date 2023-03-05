@@ -35,7 +35,6 @@ vec4 multi_scattering(float h,
 	vec3 scoeff_m,
 	vec3 extcoeff_r,
 	vec3 extcoeff_m,
-	vec3 extcoeff_o,
 	float rad_e,
 	float rad_a) {
 
@@ -55,75 +54,41 @@ vec4 multi_scattering(float h,
 	float c_sun = -light_in.y;
 
 	// calculate inscattering at pa (for prev_insc_*):
-	float dens_m_prev = density_m(height(pa, rad_e), m_scale_height);
-	float dens_r_prev = density_r(height(pa, rad_e), r_scale_height);
-	float dens_o_prev = density_o(height(pa, rad_e), r_scale_height);
-
-	vec4 gathering_pre = fetch_gathering(pa, c_sun);
-	vec4 insc_prev = vec4(gathering_pre.rgb*dens_r_prev, gathering_pre.a*dens_m_prev);
+	vec4 insc_prev = fetch_gathering(pa, c_sun);
 
 	vec4 insc_sum = vec4(0,0,0,0);
-	float dens_m_sum = 0;
-	float dens_r_sum = 0;
-	float dens_o_sum = 0;
-
 	int step_count = int(length(pa - pb)/SCATTERING_STEP_LENGTH);
 	vec2 p = pa;
 	for (int i = 1; i <= step_count; ++i) {
 		p = pa + i*SCATTERING_STEP_LENGTH*view;
 
-		float dens_m = density_m(height(p, rad_e), m_scale_height);
-		float dens_r = density_r(height(p, rad_e), r_scale_height);
-		float dens_o = density_o(height(p, rad_e), r_scale_height);
-
-		dens_m_sum += (dens_m_prev + dens_m)/2.0f * SCATTERING_STEP_LENGTH;
-		dens_r_sum += (dens_r_prev + dens_r)/2.0f * SCATTERING_STEP_LENGTH;
-		dens_o_sum += (dens_o_prev + dens_o)/2.0f * SCATTERING_STEP_LENGTH;
-
-		dens_m_prev = dens_m;
-		dens_r_prev = dens_r;
-		dens_o_prev = dens_o;
-
-		vec3 tpap = transmittance_from_density(dens_m_sum, dens_r_sum, dens_o_sum, extcoeff_m, extcoeff_r, extcoeff_o);
+		vec3 tpap = transmittance(pa, p, r_scale_height, m_scale_height, extcoeff_r, extcoeff_m, rad_e);
 		// use r for mie only.
-		vec4 gathered_p = fetch_gathering(p, dot(normalize(p), -light_in));
-		vec4 insc = vec4(gathered_p.rgb*dens_r, gathered_p.a*dens_m)*vec4(tpap, tpap.r);
-		// if (h == env.atmosphere_height-1)
-		// 	debugPrintfEXT("%v4f : %v4f", insc, gathered_p);
+		vec4 gathered_p = fetch_gathering(p, c_sun);
+		vec4 insc = vec4(gathered_p.rgb*density_r(height(p, rad_e), r_scale_height), density_m(height(p, rad_e), m_scale_height).r*gathered_p.a)*vec4(tpap, tpap.r);
 
 		insc_sum += (insc_prev + insc)/2.0f*SCATTERING_STEP_LENGTH;
 
 		insc_prev = insc;
 	}
-	float dens_m = density_m(height(pb, rad_e), m_scale_height);
-	float dens_r = density_r(height(pb, rad_e), r_scale_height);
-	float dens_o = density_o(height(pb, rad_e), r_scale_height);
-
-	dens_m_sum += (dens_m_prev + dens_m)/2.0f * length(p - pb);
-	dens_r_sum += (dens_r_prev + dens_r)/2.0f * length(p - pb);
-	dens_o_sum += (dens_o_prev + dens_o)/2.0f * length(p - pb);
-
-	vec3 tpapb = transmittance_from_density(dens_m_sum, dens_r_sum, dens_o_sum, extcoeff_m, extcoeff_r, extcoeff_o);
+	vec3 tpapb = transmittance(pa, pb, r_scale_height, m_scale_height, scoeff_r, scoeff_m, rad_e);
 	// use r for mie only.
-	vec4 gathered_p = fetch_gathering(pb, dot(normalize(pb), -light_in));
-	vec4 insc = vec4(gathered_p.rgb*dens_r, gathered_p.a*dens_m)*vec4(tpapb, tpapb.r);
+	vec4 gathered_p = fetch_gathering(pb, c_sun);
+	vec4 insc = vec4(gathered_p.rgb*density_r(height(pb, rad_e), r_scale_height), density_m(height(pb, rad_e), m_scale_height).r*gathered_p.a)*vec4(tpapb, tpapb.r);
 
 	// distance from last p in loop.
 	insc_sum += (insc_prev + insc)/2.0f*length(pb-p);
-
-	// if (h == env.atmosphere_height-1)
-	// 	debugPrintfEXT("%v4f", insc_sum);
 
 	return vec4(insc_sum.rgb*scoeff_r, insc_sum.a*scoeff_m.r)/(4.0f*pi);
 }
 
 void main() {
-	float tex_height = float(pc.offset + gl_WorkGroupID.x)/(SCATTERING_RESOLUTION_HEIGHT-1);
-	float tex_view = float(gl_WorkGroupID.y)/(SCATTERING_RESOLUTION_VIEW-1);
-	float tex_sun = float(gl_WorkGroupID.z)/(SCATTERING_RESOLUTION_SUN-1);
+	// +0.01 to prevent stupid edgecases.
+	float tex_height = float(pc.offset + gl_WorkGroupID.x)/SCATTERING_RESOLUTION_HEIGHT+0.01;
+	float tex_view = float(gl_WorkGroupID.y)/SCATTERING_RESOLUTION_VIEW;
+	float tex_sun = float(gl_WorkGroupID.z)/SCATTERING_RESOLUTION_SUN;
 
-	// 0.01 to prevent height of 0.
-	float actual_height = clamp(tex_to_height(tex_height, env.atmosphere_height), 0.3, env.atmosphere_height-1);
+	float actual_height = tex_to_height(tex_height, env.atmosphere_height);
 	float c_view = tex_to_view(tex_view, actual_height, env.r_planet);
 	float c_sun = tex_to_sun(tex_sun);
 
@@ -137,7 +102,6 @@ void main() {
 		env.mie_scattering_coefficient,
 		env.rayleigh_scattering_coefficient,
 		env.mie_scattering_coefficient/0.9f,
-		env.ozone_extinction_coefficient,
 		env.r_planet,
 		env.r_atmosphere);
 

@@ -10,7 +10,7 @@
 
 namespace en {
 
-Precomputer::PrecomputeTask::PrecomputeTask(Instantiater *instantiater, uint32_t offset, uint32_t count, uint32_t sumTarget, BufIter *currentBuffer, VkDescriptorSet env) :
+Precomputer::PrecomputeTask::PrecomputeTask(Instantiater &instantiater, uint32_t offset, uint32_t count, uint32_t sumTarget, BufIter &currentBuffer, VkDescriptorSet env) :
 	m_Instantiater{instantiater},
 	m_Offset{offset},
 	m_Count{count},
@@ -18,13 +18,18 @@ Precomputer::PrecomputeTask::PrecomputeTask(Instantiater *instantiater, uint32_t
 	m_CurrentBuffer{currentBuffer},
 	m_EnvDescSet{env} { }
 
+Precomputer::PrecomputeTask &Precomputer::PrecomputeTask::operator=(Precomputer::PrecomputeTask &other) {
+	// ref should still refer to same instance.
+	return *this;
+}
+
 InstantiaterResult Precomputer::PrecomputeTask::Instantiate() {
-	return (*m_Instantiater)(m_Offset, m_Count, m_SumTarget, *m_CurrentBuffer, m_EnvDescSet);
+	return m_Instantiater(m_Offset, m_Count, m_SumTarget, m_CurrentBuffer, m_EnvDescSet);
 }
 
 bool Precomputer::PrecomputeTask::Combine(Precomputer::PrecomputeTask &subsequent) {
-	if (subsequent.m_Instantiater == m_Instantiater &&
-		m_Offset + m_Count == subsequent.m_Offset) {
+	if (&subsequent.m_Instantiater == &m_Instantiater &&
+		subsequent.m_Offset + subsequent.m_Count == m_Offset) {
 			m_Count += subsequent.m_Count;
 			return true;
 		}
@@ -67,18 +72,21 @@ void Precomputer::_init(size_t sumTarget)
 }
 
 InstantiaterResult runBufferFunction(VkCommandBuffer buf) {
-	return [buf]() {
+	return [buf](VkSemaphore *waitSemaphore, VkPipelineStageFlags waitFlags, VkSemaphore *signalSemaphore) {
 		VkSubmitInfo submitInfo;
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.pNext = nullptr;
-		submitInfo.waitSemaphoreCount = 0;
-		submitInfo.pWaitDstStageMask = nullptr;
-		submitInfo.signalSemaphoreCount = 0;
-		submitInfo.pSignalSemaphores = nullptr;
+		submitInfo.waitSemaphoreCount = waitSemaphore != nullptr ? 1 : 0;
+		submitInfo.pWaitSemaphores = waitSemaphore;
+		submitInfo.pWaitDstStageMask = &waitFlags;
+		submitInfo.signalSemaphoreCount = signalSemaphore != nullptr ? 1 : 0;
+		submitInfo.pSignalSemaphores = signalSemaphore;
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &buf;
 
 		ASSERT_VULKAN(vkQueueSubmit(VulkanAPI::GetComputeQueue(), 1, &submitInfo, VK_NULL_HANDLE));
+
+		return signalSemaphore;
 	};
 }
 
@@ -176,17 +184,17 @@ std::deque<Precomputer::PrecomputeTask> Precomputer::CreateTasks(
 	std::deque<PrecomputeTask> tasks;
 
 	// don't need offset or count, transmittance is very fast so there's no need to split it up.
-	tasks.emplace_back(&m_TransmittanceInstantiater, 0,0, sumTarget, &currentBuffer, envDescSet);
+	tasks.emplace_back(m_TransmittanceInstantiater, 0,0, sumTarget, currentBuffer, envDescSet);
 
 	for (int i = 0; i != stepsPerScatteringOrder; ++i)
-		tasks.emplace_back(&m_SingleScatteringInstantiater, offsets[i], counts[i], sumTarget, &currentBuffer, envDescSet);
+		tasks.emplace_back(m_SingleScatteringInstantiater, offsets[i], counts[i], sumTarget, currentBuffer, envDescSet);
 	// gathering doesn't need to be split up either.
-	tasks.emplace_back(&m_GatheringInstantiater, 0, GATHERING_RESOLUTION_HEIGHT, sumTarget, &currentBuffer, envDescSet);
+	tasks.emplace_back(m_GatheringInstantiater, 0, GATHERING_RESOLUTION_HEIGHT, sumTarget, currentBuffer, envDescSet);
 
 	for (int i = 1; i != SCATTERING_ORDERS; ++i) {
 		for (int j = 0; j != stepsPerScatteringOrder; ++j)
-			tasks.emplace_back(&m_MultiScatteringInstantiater, offsets[j], counts[j], sumTarget, &currentBuffer, envDescSet);
-		tasks.emplace_back(&m_GatheringInstantiater, 0, GATHERING_RESOLUTION_HEIGHT, sumTarget, &currentBuffer, envDescSet);
+			tasks.emplace_back(m_MultiScatteringInstantiater, offsets[j], counts[j], sumTarget, currentBuffer, envDescSet);
+		tasks.emplace_back(m_GatheringInstantiater, 0, GATHERING_RESOLUTION_HEIGHT, sumTarget, currentBuffer, envDescSet);
 	}
 
 	return tasks;
@@ -222,16 +230,20 @@ void Precomputer::CreateFrameTasks(
 	m_FrameTasks.push_back({
 		// update environment used by sky before blending starts.
 		[env = env->GetEnvironment(), envConds = &m_EffectiveSkyEnv[sumTarget]]
-		() {
+		(VkSemaphore *waitSemaphore, VkPipelineStageFlags waitFlags, VkSemaphore *signalSemaphore) {
 			envConds->SetEnvironment(env);
+
+			return nullptr;
 		},
 
 		// perform cleanup for the tasks just performed.
 		// (erase to prevent re-releasing resources).
 		[cleanupIter, cleanupTasks = &m_CleanupTasks]
-		() {
+		(VkSemaphore *waitSemaphore, VkPipelineStageFlags waitFlags, VkSemaphore *signalSemaphore) {
 			(*cleanupIter)();
 			cleanupTasks->erase(cleanupIter);
+
+			return nullptr;
 		}
 	});
 
@@ -254,7 +266,7 @@ void Precomputer::CreateFrameTasks(
 		float ratio = i/float(m_BlendFrames);
 		m_FrameTasks.push_back({
 			[ratio, &ubo = m_SumImageRatioUBO]
-			(){
+			(VkSemaphore *waitSemaphore, VkPipelineStageFlags waitFlags, VkSemaphore *signalSemaphore){
 				ubo.MapMemory(sizeof(ratio), &ratio, 0, 0);
 
 				return nullptr;
@@ -263,14 +275,17 @@ void Precomputer::CreateFrameTasks(
 	}
 }
 
-void Precomputer::Frame() {
+VkSemaphore *Precomputer::Frame(VkSemaphore *waitSemaphore, VkPipelineStageFlags waitFlags, VkSemaphore *signalSemaphore) {
 	if (m_FrameTasks.begin() == m_FrameTasks.end())
-		return;
+		return nullptr;
+	VkSemaphore *nextSignalSemaphore;
 	// we have at least one task group, run and remove it.
 	for (InstantiaterResult task : m_FrameTasks.front()) {
-		task();
+		nextSignalSemaphore = task(waitSemaphore, waitFlags, waitSemaphore);
 	}
 	m_FrameTasks.pop_front();
+
+	return nextSignalSemaphore;
 }
 
 void Precomputer::Enqueue() {
@@ -291,79 +306,78 @@ void Precomputer::RenderImgui() {
 }
 
 void Precomputer::CreateDescriptor(float initial_value) {
-	VkDevice device = VulkanAPI::GetDevice();
-	// Create Descriptor Set Layout
-	VkDescriptorSetLayoutBinding layoutBinding;
-	layoutBinding.binding = 0;
-	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	layoutBinding.descriptorCount = 1;
-	// access from fragment (atmosphere.frag) and compute (aerial perspective).
-	layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
-	layoutBinding.pImmutableSamplers = nullptr;
+		VkDevice device = VulkanAPI::GetDevice();
 
-	VkDescriptorSetLayoutCreateInfo descSetLayoutCreateInfo;
-	descSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	descSetLayoutCreateInfo.pNext = nullptr;
-	descSetLayoutCreateInfo.flags = 0;
-	descSetLayoutCreateInfo.bindingCount = 1;
-	descSetLayoutCreateInfo.pBindings = &layoutBinding;
+		// Create Descriptor Set Layout
+		VkDescriptorSetLayoutBinding layoutBinding;
+		layoutBinding.binding = 0;
+		layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		layoutBinding.descriptorCount = 1;
+		// access from fragment (atmosphere.frag) and compute (aerial perspective).
+		layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+		layoutBinding.pImmutableSamplers = nullptr;
 
-	VkResult result = vkCreateDescriptorSetLayout(device, &descSetLayoutCreateInfo, nullptr, &m_RatioDescriptorSetLayout);
-	ASSERT_VULKAN(result);
+		VkDescriptorSetLayoutCreateInfo descSetLayoutCreateInfo;
+		descSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		descSetLayoutCreateInfo.pNext = nullptr;
+		descSetLayoutCreateInfo.flags = 0;
+		descSetLayoutCreateInfo.bindingCount = 1;
+		descSetLayoutCreateInfo.pBindings = &layoutBinding;
 
-	// Create Descriptor Pool
-	VkDescriptorPoolSize poolSize;
-	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSize.descriptorCount = 1;
+		VkResult result = vkCreateDescriptorSetLayout(device, &descSetLayoutCreateInfo, nullptr, &m_RatioDescriptorSetLayout);
+		ASSERT_VULKAN(result);
 
-	VkDescriptorPoolCreateInfo descPoolCreateInfo;
-	descPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descPoolCreateInfo.pNext = nullptr;
-	descPoolCreateInfo.flags = 0;
-	descPoolCreateInfo.maxSets = 1;
-	descPoolCreateInfo.poolSizeCount = 1;
-	descPoolCreateInfo.pPoolSizes = &poolSize;
+		// Create Descriptor Pool
+		VkDescriptorPoolSize poolSize;
+		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSize.descriptorCount = 1;
 
-	result = vkCreateDescriptorPool(device, &descPoolCreateInfo, nullptr, &m_DescriptorPool);
-	ASSERT_VULKAN(result);
+		VkDescriptorPoolCreateInfo descPoolCreateInfo;
+		descPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		descPoolCreateInfo.pNext = nullptr;
+		descPoolCreateInfo.flags = 0;
+		descPoolCreateInfo.maxSets = 1;
+		descPoolCreateInfo.poolSizeCount = 1;
+		descPoolCreateInfo.pPoolSizes = &poolSize;
 
-	// Allocate Descriptor Set
-	VkDescriptorSetAllocateInfo allocateInfo;
-	allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocateInfo.pNext = nullptr;
-	allocateInfo.descriptorPool = m_DescriptorPool;
-	allocateInfo.descriptorSetCount = 1;
-	allocateInfo.pSetLayouts = &m_RatioDescriptorSetLayout;
+		result = vkCreateDescriptorPool(device, &descPoolCreateInfo, nullptr, &m_DescriptorPool);
+		ASSERT_VULKAN(result);
 
-	ASSERT_VULKAN(vkAllocateDescriptorSets(device, &allocateInfo, &m_RatioDescriptorSet));
+		// Allocate Descriptor Set
+		VkDescriptorSetAllocateInfo allocateInfo;
+		allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocateInfo.pNext = nullptr;
+		allocateInfo.descriptorPool = m_DescriptorPool;
+		allocateInfo.descriptorSetCount = 1;
+		allocateInfo.pSetLayouts = &m_RatioDescriptorSetLayout;
 
-	// Write Descriptor Set
-	VkDescriptorBufferInfo bufferInfo;
-	bufferInfo.buffer = m_SumImageRatioUBO.GetVulkanHandle();
-	bufferInfo.offset = 0;
-	bufferInfo.range = sizeof(m_SumImageRatio);
+		ASSERT_VULKAN(vkAllocateDescriptorSets(device, &allocateInfo, &m_RatioDescriptorSet));
 
-	VkWriteDescriptorSet writeDescSet;
-	writeDescSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	writeDescSet.pNext = nullptr;
-	writeDescSet.dstSet = m_RatioDescriptorSet;
-	writeDescSet.dstBinding = 0;
-	writeDescSet.dstArrayElement = 0;
-	writeDescSet.descriptorCount = 1;
-	writeDescSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	writeDescSet.pImageInfo = nullptr;
-	writeDescSet.pBufferInfo = &bufferInfo;
-	writeDescSet.pTexelBufferView = nullptr;
+		// Write Descriptor Set
+		VkDescriptorBufferInfo bufferInfo;
+		bufferInfo.buffer = m_SumImageRatioUBO.GetVulkanHandle();
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(m_SumImageRatio);
 
-	vkUpdateDescriptorSets(device, 1, &writeDescSet, 0, nullptr);
+		VkWriteDescriptorSet writeDescSet;
+		writeDescSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writeDescSet.pNext = nullptr;
+		writeDescSet.dstSet = m_RatioDescriptorSet;
+		writeDescSet.dstBinding = 0;
+		writeDescSet.dstArrayElement = 0;
+		writeDescSet.descriptorCount = 1;
+		writeDescSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		writeDescSet.pImageInfo = nullptr;
+		writeDescSet.pBufferInfo = &bufferInfo;
+		writeDescSet.pTexelBufferView = nullptr;
 
-	m_SumImageRatioUBO.MapMemory(sizeof(initial_value), &initial_value, 0, 0);
+		vkUpdateDescriptorSets(device, 1, &writeDescSet, 0, nullptr);
+
+		m_SumImageRatioUBO.MapMemory(sizeof(initial_value), &initial_value, 0, 0);
 }
 
-VkDescriptorSet Precomputer::GetRatioDescriptorSet() const { return m_RatioDescriptorSet; }
-VkDescriptorSetLayout Precomputer::GetRatioDescriptorSetLayout() const { return m_RatioDescriptorSetLayout; }
+VkDescriptorSet Precomputer::GetRatioDescriptorSet() { return m_RatioDescriptorSet; }
+VkDescriptorSetLayout Precomputer::GetRatioDescriptorSetLayout() { return m_RatioDescriptorSetLayout; }
 EnvConditions &Precomputer::GetEffectiveEnv(size_t indx) { return m_EffectiveSkyEnv[indx]; }
-VkDescriptorSetLayout Precomputer::GetEffectiveEnvSetLayout() const {return m_EffectiveSkyEnv[0].GetDescriptorSetLayout(); }
-VkDescriptorSet Precomputer::GetEffectiveEnvSet(size_t indx) const { return m_EffectiveSkyEnv[indx].GetDescriptorSet(); };
 
 };

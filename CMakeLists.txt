@@ -9,9 +9,6 @@ set(CMAKE_BUILD_TYPE RelWithDebInfo)
 # Project
 project(SkyRenderer)
 
-add_compile_definitions(M_PI=3.14159)
-add_compile_definitions(M_PI_2=1.57)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
